@@ -391,6 +391,10 @@ function renderWhy(f){
   const box = document.getElementById("whyBox");
   if(!box) return;
   if(!f){ box.innerHTML = ""; return; }
+  // The published feed can lag the CDN by minutes; if its reason field is blank, fall back to
+  // the freshest decision row from the realtime stream.
+  let signal = f.signal || f.flat_reason || "";
+  if(!signal && LIVE_ROWS.length) signal = LIVE_ROWS[0].signal || "";
   const pnl = Number(f.equity||0) - Number(f.initial_capital||10000);
   const pos = Number(f.shares||0) > 0;
   const col = pnl > 0 ? "#3fb950" : (pnl < 0 ? "#f85149" : "var(--muted)");
@@ -409,8 +413,8 @@ function renderWhy(f){
         <div style="font-size:11px" class="muted">${Number(f.fills)||0} fill(s)</div>
       </div>
       <div style="flex:1;min-width:220px"><span class="muted" style="font-size:11px">WHY IT IS ${pos?"HOLDING":"FLAT"}</span>
-        <div style="font-size:12px;margin-top:2px">${esc(f.signal||"—")}</div>
-        <div style="font-size:10px" class="muted">mode: ${esc(f.mode||"—")}</div>
+        <div style="font-size:12px;margin-top:2px">${esc(signal||"—")}</div>
+        <div style="font-size:10px" class="muted">mode: ${esc(f.mode|| (LIVE_ROWS[0]&&LIVE_ROWS[0].mode) || "live")}</div>
       </div>
     </div>
   </div>`;
@@ -478,10 +482,36 @@ async function startRealtime(){
   }catch(e){}
   if(!topic){ setRtStatus("no topic configured"); return; }
 
+  // Seed from recent history first, so the tape is populated on load instead of waiting for
+  // the next decision and showing the (minutes-old) GitHub copy in the meantime.
+  try{
+    const h = await fetch(`https://ntfy.sh/${topic}/json?poll=1&since=15m`, {cache:"no-store"});
+    if(h.ok){
+      const text = await h.text();
+      for(const line of text.split("\n")){
+        if(!line.trim()) continue;
+        let m; try{ m = JSON.parse(line); }catch(e){ continue; }
+        if(m.event !== "message" || !m.message) continue;
+        let row; try{ row = JSON.parse(m.message); }catch(e){ continue; }
+        if(!row || !row.ts || !isPlausible(row)) continue;
+        LIVE_ROWS.push(row);
+      }
+      // newest first
+      LIVE_ROWS.sort((a,b)=> Date.parse(b.ts) - Date.parse(a.ts));
+      LIVE_ROWS = LIVE_ROWS.slice(0, 80);
+      if(LIVE_ROWS.length){
+        renderCall(LIVE_ROWS[0], true);
+        renderTape(LIVE_ROWS);
+        const why = document.getElementById("whyBox");
+        if(why && FEED) renderWhy(FEED);
+      }
+    }
+  }catch(e){}
+
   try{
     if(SS) SS.close();
     SS = new EventSource(`https://ntfy.sh/${topic}/sse`);
-    SS.onopen = ()=> setRtStatus("live");
+    SS.onopen = ()=> setRtStatus(`live · ${LIVE_ROWS.length}`);
     SS.onerror = ()=> setRtStatus("reconnecting");
     SS.onmessage = ev=>{
       if(!ev.data) return;
