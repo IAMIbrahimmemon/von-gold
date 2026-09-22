@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Data: large and regenerable. The parquet cache and raw payloads stay local.
+data/raw/
+data/processed/*.parquet
+data/processed/*.jsonl
+hf_orig/
+hfcache/
+
+# Runtime: the switch, ledger and status ARE meant to be committed (they are the
+# control channel and the audit trail), so they are not ignored. Position state is
+# local-only bookkeeping.
+runtime/position.json
+
+# OS
+.DS_Store

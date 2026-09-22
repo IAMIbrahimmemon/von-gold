@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>von-gold — dry run monitor</title>
+<style>
+  :root{
+    --bg:#0b0d10; --panel:#14181d; --panel2:#1a1f26; --line:#262d36;
+    --fg:#e8edf2; --muted:#8b97a5; --accent:#c9a227; --good:#3fb950;
+    --bad:#f85149; --warn:#d29922; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:24px;max-width:1180px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 2px;letter-spacing:-.01em}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+     margin:0 0 12px;font-weight:600}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:20px}
+  .grid{display:grid;gap:12px}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .metric .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .metric .v{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;
+    font-family:var(--mono);margin-top:4px}
+  .metric .d{font-size:11px;color:var(--muted);margin-top:2px}
+  .row{display:flex;justify-content:space-between;padding:7px 0;
+    border-bottom:1px solid var(--line);font-family:var(--mono);font-size:13px}
+  .row:last-child{border-bottom:0}
+  .row .l{color:var(--muted)}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+    font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  .on{background:rgba(63,185,80,.15);color:var(--good);border:1px solid rgba(63,185,80,.4)}
+  .off{background:rgba(248,81,73,.13);color:var(--bad);border:1px solid rgba(248,81,73,.4)}
+  .killed{background:rgba(210,153,34,.15);color:var(--warn);border:1px solid rgba(210,153,34,.45)}
+  button{cursor:pointer;border-radius:8px;border:1px solid var(--line);padding:10px 18px;
+    font-size:13px;font-weight:600;background:var(--panel2);color:var(--fg);transition:.15s}
+  button:hover{border-color:var(--muted)}
+  button.primary{background:var(--good);border-color:var(--good);color:#04220a}
+  button.danger{background:var(--bad);border-color:var(--bad);color:#2a0503}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .good{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)} .muted{color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+  th{text-align:left;color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;
+    letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:6px 8px;border-bottom:1px solid var(--line)}
+  .banner{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.4);color:var(--bad);
+    padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:13px}
+  #chart{width:100%;height:180px;display:block}
+  .foot{margin-top:22px;color:var(--muted);font-size:11px;line-height:1.7}
+  code{font-family:var(--mono);background:var(--panel2);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+  <h1>von-gold <span class="muted" style="font-weight:400">dry run</span></h1>
+  <div class="sub">Gold (GLD) • paper trading only • decision model: local von 1.0 MLX (395M, no LLM tokens)</div>
+
+  <div id="alert"></div>
+
+  <div class="panel" style="margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="switch" class="pill off">unknown</span>
+        <span id="switchReason" class="muted" style="font-size:12px"></span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button id="btnOn" class="primary">Turn ON</button>
+        <button id="btnOff" class="danger">Turn OFF</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="panel metric"><div class="k">Equity</div><div class="v" id="mEquity">—</div>
+      <div class="d" id="mEquityD"></div></div>
+    <div class="panel metric"><div class="k">Exposure</div><div class="v" id="mTarget">—</div>
+      <div class="d" id="mTargetD"></div></div>
+    <div class="panel metric"><div class="k">GLD price</div><div class="v" id="mPrice">—</div>
+      <div class="d" id="mPriceD"></div></div>
+    <div class="panel metric"><div class="k">Drawdown</div><div class="v" id="mDD">—</div>
+      <div class="d" id="mDDD"></div></div>
+  </div>
+
+  <div class="panel" style="margin-bottom:12px">
+    <h2>Equity curve (paper fills)</h2>
+    <svg id="chart" viewBox="0 0 800 180" preserveAspectRatio="none"></svg>
+    <div id="chartNote" class="muted" style="font-size:11px;margin-top:6px"></div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:12px">
+    <div class="panel">
+      <h2>von decision (latest session)</h2>
+      <div id="vonBox"></div>
+    </div>
+    <div class="panel">
+      <h2>Strategy inputs</h2>
+      <div id="inputsBox"></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:12px">
+    <h2>Fill history</h2>
+    <div id="fillsBox"></div>
+  </div>
+
+  <div class="foot">
+    <strong>Status source:</strong> <code id="statusSrc"></code><br>
+    This panel is display-only except for the switch. Turning the bot off writes
+    <code>runtime/control.json</code>; the local runner reads it on its next tick and moves
+    exposure to zero. Nothing here can place a real order.
+  </div>
+
+<script>
+const REPO = window.VONGOLD_REPO || "IAMIbrahimmemon/von-gold";
+const BRANCH = "main";
+const RAW = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/runtime`;
+
+function fmtMoney(v){ if(v==null||isNaN(v)) return "—";
+  return "$"+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtPct(v,d=1){ if(v==null||isNaN(v)) return "—"; return (v*100).toFixed(d)+"%"; }
+function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function rows(obj){
+  return Object.entries(obj).map(([k,v])=>{
+    let cls="";
+    if(typeof v==="boolean") cls = v? "good":"muted";
+    return `<div class="row"><span class="l">${esc(k)}</span><span class="${cls}">${esc(v)}</span></div>`;
+  }).join("");
+}
+
+function drawChart(pts){
+  const svg = document.getElementById("chart");
+  const note = document.getElementById("chartNote");
+  const W=800,H=180,P=8;
+  if(!pts || pts.length<2){
+    svg.innerHTML = `<text x="400" y="95" text-anchor="middle" fill="#8b97a5"
+      font-size="13" font-family="sans-serif">No fills yet — the curve appears after the first paper trade.</text>`;
+    note.textContent = pts && pts.length===1 ? "1 point recorded." : "";
+    return;
+  }
+  const v = pts.map(p=>Number(p.equity)).filter(x=>isFinite(x));
+  const min=Math.min(...v), max=Math.max(...v), span=(max-min)||1;
+  const x=i=>P+i*(W-2*P)/(v.length-1);
+  const y=val=>H-P-((val-min)/span)*(H-2*P);
+  const d=v.map((val,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(val).toFixed(1)}`).join(" ");
+  const area=`${d} L${x(v.length-1).toFixed(1)},${H-P} L${x(0).toFixed(1)},${H-P} Z`;
+  const up = v[v.length-1] >= v[0];
+  const col = up? "#3fb950" : "#f85149";
+  const first = pts[0], last = pts[pts.length-1];
+  svg.innerHTML = `
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${col}" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="${area}" fill="url(#g)"/>
+    <path d="${d}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    <line x1="${P}" y1="${y(v[0])}" x2="${W-P}" y2="${y(v[0])}"
+      stroke="#262d36" stroke-width="1" stroke-dasharray="3 3"/>`;
+  note.textContent = `${pts.length} fills • ${first.date||first.ts} → ${last.date||last.ts} • start ${fmtMoney(v[0])} → now ${fmtMoney(v[v.length-1])}`;
+}
+
+async function load(){
+  let status = null, control = null;
+  try {
+    const r = await fetch(`${RAW}/status.json?t=${Date.now()}`, {cache:"no-store"});
+    if(r.ok) status = await r.json();
+  } catch(e){}
+  try {
+    const r = await fetch(`/api/control?t=${Date.now()}`, {cache:"no-store"});
+    if(r.ok) control = await r.json();
+  } catch(e){}
+
+  document.getElementById("statusSrc").textContent = `${RAW}/status.json`;
+
+  const enabled = control ? control.enabled : (status ? status.enabled : null);
+  const killed  = status && status.kill_switch_tripped;
+
+  const sw = document.getElementById("switch");
+  if(killed){ sw.className="pill killed"; sw.textContent="kill switch"; }
+  else if(enabled===true){ sw.className="pill on"; sw.textContent="● running"; }
+  else if(enabled===false){ sw.className="pill off"; sw.textContent="○ stopped"; }
+  else { sw.className="pill off"; sw.textContent="unknown"; }
+
+  document.getElementById("switchReason").textContent =
+    (control && control.reason) ? control.reason : (status && status.enabled===false ? "exposure forced to zero" : "");
+
+  document.getElementById("btnOn").disabled  = enabled === true;
+  document.getElementById("btnOff").disabled = enabled === false;
+  document.getElementById("btnOn").onclick  = ()=>setControl(true);
+  document.getElementById("btnOff").onclick = ()=>setControl(false);
+
+  const alertBox = document.getElementById("alert");
+  if(!status){
+    alertBox.innerHTML = `<div class="banner">No <code>status.json</code> published yet.
+      The local runner has not completed a session. Run
+      <code>von-gold tick --enable</code> on the Mac to publish the first one.</div>`;
+  } else if(killed){
+    alertBox.innerHTML = `<div class="banner">Kill switch tripped: drawdown exceeded the configured
+      limit. Exposure is zero and the switch is forced off. Re-enable deliberately after review.</div>`;
+  } else if(status.von_error){
+    alertBox.innerHTML = `<div class="banner" style="background:rgba(210,153,34,.1);border-color:rgba(210,153,34,.4);color:#d29922">
+      Decision model unavailable (<code>${esc(status.von_error)}</code>) — fell back to the
+      mechanical strategy. This is the designed fail-safe, not a crash.</div>`;
+  } else { alertBox.innerHTML = ""; }
+
+  if(status){
+    document.getElementById("mEquity").textContent = fmtMoney(status.equity);
+    document.getElementById("mEquity").className = "v " + ((status.equity??0) >= 10000 ? "good":"bad");
+    document.getElementById("mEquityD").textContent = status.initial_capital
+      ? `from $10,000 • ${fmtPct((status.equity/10000)-1,2)}` : "paper account";
+    document.getElementById("mTarget").textContent = fmtPct(status.target_exposure,0);
+    document.getElementById("mTargetD").textContent =
+      `mechanical ${fmtPct(status.mechanical_target,0)} × von ${Number(status.von_multiplier??1).toFixed(2)}`;
+    document.getElementById("mPrice").textContent = fmtMoney(status.price);
+    document.getElementById("mPriceD").textContent = `as of ${esc(status.date)}`;
+    const dd = status.drawdown_from_peak;
+    document.getElementById("mDD").textContent = fmtPct(dd,2);
+    document.getElementById("mDD").className = "v " + (dd < -0.1 ? "bad" : "good");
+    document.getElementById("mDDD").textContent = "from peak";
+
+    const v = status.von;
+    document.getElementById("vonBox").innerHTML = v ? rows({
+      regime: v.regime,
+      "regime confidence": Number(v.regime_confidence??0).toFixed(3),
+      "long justified (P)": Number(v.long_prob??0).toFixed(3),
+      "risk elevated (P)": Number(v.risk_prob??0).toFixed(3),
+      "conviction (0-4)": Number(v.conviction??0).toFixed(2),
+      "tokens used": v.usage ? `${v.usage.input_tokens} in / ${v.usage.output_tokens} out` : "—",
+    }) : `<div class="muted">No model answer recorded for this session.</div>`;
+
+    document.getElementById("inputsBox").innerHTML = rows({
+      "vol 21d (ann)": fmtPct(status.inputs?.vol_21d_ann),
+      "momentum score": Number(status.inputs?.tsmom??0).toFixed(3),
+      "above 200d MA": status.inputs?.above_ma200,
+      "real-yield supportive": status.inputs?.real_yield_support,
+      "dollar supportive": status.inputs?.dollar_support,
+      "10y real yield": status.inputs?.real_yield_10y==null? "—" : Number(status.inputs.real_yield_10y).toFixed(2)+"%",
+    });
+
+    const fills = status.recent_fills || [];
+    document.getElementById("fillsBox").innerHTML = fills.length ? `
+      <table><thead><tr><th>Date</th><th>Price</th><th>Shares</th><th>Cash</th><th>Equity</th></tr></thead>
+      <tbody>${fills.slice().reverse().map(f=>`<tr>
+        <td>${esc(f.date)}</td><td>${fmtMoney(f.price)}</td>
+        <td>${Number(f.shares).toFixed(4)}</td><td>${fmtMoney(f.cash)}</td>
+        <td>${fmtMoney(f.equity_after)}</td></tr>`).join("")}</tbody></table>`
+      : `<div class="muted">No paper fills yet.</div>`;
+
+    drawChart(status.equity_curve || []);
+  } else {
+    drawChart([]);
+  }
+}
+
+async function setControl(enabled){
+  const btns=[document.getElementById("btnOn"),document.getElementById("btnOff")];
+  btns.forEach(b=>b.disabled=true);
+  try{
+    const r = await fetch("/api/control",{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({enabled, changed_by:"web-monitor"})
+    });
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok){
+      alert("Could not update the switch.\n\n"+(j.error||r.status)+
+            "\n\nIf this is the first time, set GITHUB_TOKEN in the Vercel project settings.");
+    }
+  }catch(e){ alert("Network error updating the switch: "+e.message); }
+  load();
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
