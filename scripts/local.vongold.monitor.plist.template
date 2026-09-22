@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.vongold.monitor</string>
+    <!-- Serves the dashboard from local disk so the feed has no CDN in its path. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>exec env -u PYTHONPATH REPO_DIR_PLACEHOLDER/.venv/bin/python REPO_DIR_PLACEHOLDER/scripts/local_server.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>EnvironmentVariables</key>
+    <dict><key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string></dict>
+    <key>StandardOutPath</key>
+    <string>REPO_DIR_PLACEHOLDER/runtime/monitor.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>REPO_DIR_PLACEHOLDER/runtime/monitor.err.log</string>
+    <key>WorkingDirectory</key>
+    <string>REPO_DIR_PLACEHOLDER</string>
+</dict>
+</plist>

@@ -165,7 +165,7 @@
   </div>
 
   <div class="foot">
-    <strong>Status source:</strong> <code id="statusSrc"></code><br>
+    <strong>Status source:</strong> <code id="statusSrc"></code> <span id="modeTag" class="muted"></span><br>
     <strong>Read-only.</strong> This page cannot change what the bot does — the on/off switch runs
     on the Mac that holds the paper account. Decisions come from <code>runtime/status.json</code>
     (published once per session); the price and equity above are revalued live and are a mark,
@@ -173,9 +173,30 @@
   </div>
 
 <script>
+// ---------------------------------------------------------------------------
+// Two modes, decided by where the page is served from.
+//
+//   LOCAL (http://127.0.0.1:8788)  -- reads runtime/ directly off the disk, so there is no
+//     CDN in the path and no serverless function needed. The feed updates the moment the loop
+//     writes it. This is the accurate view and the reason to run it locally: the GitHub route
+//     is capped at a 5-minute CDN cache (measured Cache-Control: max-age=300), which is fine
+//     for a public showcase and useless for watching decisions land.
+//
+//   PUBLIC (the Vercel deploy) -- reads the published copy, which lags by that CDN cache.
+//
+// Everything downstream is identical, so the two views cannot drift in what they display.
+// ---------------------------------------------------------------------------
+const LOCAL = /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
 const REPO = window.VONGOLD_REPO || "IAMIbrahimmemon/von-gold";
 const BRANCH = "main";
-const RAW = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/runtime`;
+const RAW = LOCAL ? "/runtime" : `https://raw.githubusercontent.com/${REPO}/${BRANCH}/runtime`;
+const API = LOCAL ? "" : "";   // local server exposes the same paths under /api
+
+// On the local server the quote and topic come from a single endpoint backed by the same
+// Yahoo call the Vercel function makes -- so no API keys and no cloud function are required.
+async function quoteUrl(params){
+  return LOCAL ? `/api/quote?${params}` : `/api/quote?${params}`;
+}
 
 function fmtMoney(v){ if(v==null||isNaN(v)) return "—";
   return "$"+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -233,6 +254,7 @@ async function load(){
   } catch(e){}
 
   document.getElementById("statusSrc").textContent = `${RAW}/status.json`;
+  document.getElementById("modeTag").textContent = LOCAL ? "· LOCAL (no CDN lag)" : "· published copy (≈5 min CDN lag)";
 
   const enabled = control ? control.enabled : (status ? status.enabled : null);
   const killed  = status && status.kill_switch_tripped;
@@ -489,7 +511,7 @@ async function startRealtime(){
   let topic = null;
   try{
     const r = await fetch(`/api/quote?what=topic&t=${Date.now()}`, {cache:"no-store"});
-    if(r.ok){ const j = await r.json(); topic = j.topic; }
+    if(r.ok){ const j = await r.json(); topic = j.topic || null; }
   }catch(e){}
   if(!topic){ setRtStatus("no topic configured"); return; }
 

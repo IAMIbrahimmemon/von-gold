@@ -120,6 +120,15 @@ class LedgerState:
             "avg_cost": round(pos.avg_cost, 4),
             "initial_capital": self.store.initial_capital,
             "unrealized": round((mark.price - pos.avg_cost) * pos.shares, 2) if pos.shares else 0.0,
+            # P/L bookkeeping. Without realized_pl a closed round trip is invisible: equity
+            # returns to roughly its starting value and the gain on the trade never appears.
+            "realized_pl": round(getattr(pos, "realized_pl", 0.0), 2),
+            "fees_paid": round(getattr(pos, "fees_paid", 0.0), 2),
+            "trades": getattr(pos, "trades", 0),
+            "wins": getattr(pos, "wins", 0),
+            "losses": getattr(pos, "losses", 0),
+            "total_pl": round(getattr(pos, "realized_pl", 0.0)
+                              + ((mark.price - pos.avg_cost) * pos.shares if pos.shares else 0.0), 2),
             "fills": fills_count,
             "flat_reason": signal,
             "decisions": self.feed[::-1],  # newest first, like a trade tape
@@ -278,6 +287,10 @@ def main() -> int:
             "market_open": mark.market_open,
             "age_minutes": round(mark.age_minutes, 1),
             "signal": signal,
+            "realized_pl": round(getattr(pos, "realized_pl", 0.0), 2),
+            "fees_paid": round(getattr(pos, "fees_paid", 0.0), 2),
+            "trades": getattr(pos, "trades", 0),
+            "mode": ("live-signals" if args.live_signals else "daily-signals"),
         }
         st.push(row)
         st.write_feed(args.symbol, mark, target, signal, mech,

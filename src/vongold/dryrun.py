@@ -160,6 +160,17 @@ def simulate_fill(position, target_exposure: float, price: float, cost: CostMode
     # Cost comes out of cash; buying reduces cash by the notional plus the fee.
     new_cash = position.cash - delta_value - fee
 
+    # --- realize P/L BEFORE mutating the position -------------------------------
+    # A sale closes part or all of the position; the gain on the shares sold is now real and
+    # must be banked, because after the sale those shares no longer exist to carry the gain.
+    # Without this a profitable round trip leaves equity at roughly its starting value (plus or
+    # minus fees) and the trade looks like it accomplished nothing.
+    realized = 0.0
+    shares_sold = 0.0
+    if delta_shares < -1e-12:
+        shares_sold = min(abs(delta_shares), position.shares)
+        realized = (price - position.avg_cost) * shares_sold - fee
+
     position.shares = new_shares
     position.cash = new_cash
     if position.shares > 0 and delta_shares > 0:
@@ -171,12 +182,25 @@ def simulate_fill(position, target_exposure: float, price: float, cost: CostMode
     elif position.opened_at is None:
         position.opened_at = utcnow()
 
+    # --- bookkeeping ------------------------------------------------------------
+    position.fees_paid = getattr(position, "fees_paid", 0.0) + fee
+    position.trades = getattr(position, "trades", 0) + 1
+    if shares_sold > 0:
+        position.realized_pl = getattr(position, "realized_pl", 0.0) + realized
+        if realized > 0:
+            position.wins = getattr(position, "wins", 0) + 1
+        elif realized < 0:
+            position.losses = getattr(position, "losses", 0) + 1
+
     equity_after = position.cash + position.shares * price
     return {
         "traded": True,
         "delta_value": delta_value,
         "delta_shares": delta_shares,
         "cost": fee,
+        "realized_pl": realized,
+        "shares_sold": shares_sold,
+        "avg_cost_at_sale": price - (realized + fee) / shares_sold if shares_sold else 0.0,
         "equity_before": equity_before,
         "equity_after": equity_after,
     }
@@ -286,6 +310,11 @@ def run_once(
         "cash": pos.cash,
         "equity": pos.equity,
         "drawdown_from_peak": dd,
+        "realized_pl": round(getattr(pos, "realized_pl", 0.0), 2),
+        "fees_paid": round(getattr(pos, "fees_paid", 0.0), 2),
+        "trades": getattr(pos, "trades", 0),
+        "wins": getattr(pos, "wins", 0),
+        "losses": getattr(pos, "losses", 0),
         "traded": bool(fill.get("traded")),
         "von": decision["von"],
         "von_error": decision["von_error"],

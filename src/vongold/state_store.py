@@ -84,10 +84,30 @@ class PaperPosition:
     last_price: float = 0.0
     equity: float = 0.0
     opened_at: str | None = None
+    # --- P/L bookkeeping -------------------------------------------------------------
+    # These exist because without them the dashboard could only show equity, which cannot
+    # answer "did the trades make money?". A closed round trip produces no visible change in
+    # equity beyond the fees, so the gain on the trade is invisible unless it is booked here
+    # at the moment of the sale.
+    realized_pl: float = 0.0      # cumulative, booked when shares are SOLD
+    fees_paid: float = 0.0        # cumulative transaction costs
+    trades: int = 0               # number of fills
+    wins: int = 0                 # round trips closed at a profit
+    losses: int = 0               # round trips closed at a loss
 
     @property
     def market_value(self) -> float:
         return self.shares * self.last_price
+
+    @property
+    def unrealized_pl(self) -> float:
+        """Mark-to-market gain on the open position. Zero when flat."""
+        return (self.last_price - self.avg_cost) * self.shares if self.shares else 0.0
+
+    @property
+    def total_pl(self) -> float:
+        """Everything the account has made or lost: banked plus still-open."""
+        return self.realized_pl + self.unrealized_pl
 
 
 class Ledger:

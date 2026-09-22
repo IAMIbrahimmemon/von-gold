@@ -1038,3 +1038,96 @@ def test_realtime_topic_is_set_and_the_page_reads_it():
     api = (repo / "web" / "api" / "quote.js").read_text()
     assert "realtime.json" in api, "the endpoint must read runtime/realtime.json"
     assert "ntfy" in page, "the page must point at the realtime transport"
+
+
+def test_realized_pl_is_booked_on_a_sale():
+    """A profitable round trip must show its gain, not just return equity to the start.
+
+    This was a real gap: simulate_fill tracked cash/shares/avg_cost but never booked the gain
+    on the shares it sold. A closed trade therefore left equity at roughly its starting value
+    and the profit was invisible -- the dashboard could not answer "did the trades make money?".
+    """
+    import tempfile
+    from pathlib import Path as _P
+    from vongold.config import CostModel
+    from vongold.dryrun import simulate_fill
+    from vongold.state_store import PositionStore
+
+    st = PositionStore(_P(tempfile.mkdtemp()) / "p.json")
+    pos = st.state
+    cost = CostModel()
+    assert pos.realized_pl == 0.0
+
+    # buy at 400, sell at 440 -> a +10% round trip
+    simulate_fill(pos, 1.0, 400.00, cost)
+    assert pos.shares > 0 and abs(pos.avg_cost - 400.0) < 0.5
+    r = simulate_fill(pos, 0.0, 440.00, cost)
+
+    assert r["traded"] is True
+    assert r["realized_pl"] > 0, "a profitable sale must book a positive realized P/L"
+    assert pos.realized_pl > 0
+    assert abs(pos.realized_pl - r["realized_pl"]) < 1e-6
+    assert pos.wins == 1 and pos.losses == 0
+    assert pos.trades == 2
+    assert pos.shares == 0.0
+    # the account must actually be up, net of fees
+    assert pos.cash > 10_000.0
+    assert pos.cash < 10_000.0 * 1.10, "fees must be charged, so never the full move"
+
+
+def test_losing_round_trip_books_a_loss():
+    import tempfile
+    from pathlib import Path as _P
+    from vongold.config import CostModel
+    from vongold.dryrun import simulate_fill
+    from vongold.state_store import PositionStore
+
+    st = PositionStore(_P(tempfile.mkdtemp()) / "p.json")
+    pos = st.state
+    simulate_fill(pos, 1.0, 440.00, CostModel())
+    simulate_fill(pos, 0.0, 400.00, CostModel())
+    assert pos.realized_pl < 0
+    assert pos.losses == 1 and pos.wins == 0
+    assert pos.cash < 10_000.0
+
+
+def test_fees_are_charged_on_both_sides():
+    """Costs must be real, or the simulation flatters itself."""
+    import tempfile
+    from pathlib import Path as _P
+    from vongold.config import CostModel
+    from vongold.dryrun import simulate_fill
+    from vongold.state_store import PositionStore
+
+    st = PositionStore(_P(tempfile.mkdtemp()) / "p.json")
+    pos = st.state
+    simulate_fill(pos, 1.0, 400.00, CostModel())
+    simulate_fill(pos, 0.0, 400.00, CostModel())   # flat round trip: only fees move the needle
+    assert pos.fees_paid > 0, "both sides must charge"
+    assert pos.cash < 10_000.0, "a flat round trip must lose money to fees"
+    assert pos.realized_pl < 0
+
+
+def test_trend_gate_crossing_actually_trades_with_a_reasonable_frequency():
+    """The strategy is a trend follower: it trades on gate crossings, not continuously.
+
+    Measured on 10 years of GLD: ~14 exposure changes per year (roughly monthly). That is the
+    honest answer to "why is it not going in and out constantly" -- a daily-signal trend
+    strategy does not, and forcing it to would be a different (untested) strategy.
+    """
+    from vongold.backtest import run_backtest
+    from vongold.data import build_dataset
+    import numpy as np
+
+    df = build_dataset("GLD", rng="10y")
+    r = run_backtest(df)
+    years = (df.index[-1] - df.index[0]).days / 365.25
+    target = getattr(r, "target", None)
+    assert target is not None, "the backtest must expose its target series"
+    changes = int((np.abs(np.diff(np.asarray(target))) > 1e-9).sum())
+    per_year = changes / years
+    assert per_year > 3, f"a trend follower should trade more than {per_year:.1f}x/year"
+    assert per_year < 60, (
+        f"{per_year:.1f} exposure changes/year is churn, not trend following -- the brake "
+        f"or the band has regressed"
+    )
