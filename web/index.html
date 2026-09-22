@@ -65,9 +65,8 @@
         <span id="switch" class="pill off">unknown</span>
         <span id="switchReason" class="muted" style="font-size:12px"></span>
       </div>
-      <div style="display:flex;gap:8px">
-        <button id="btnOn" class="primary">Turn ON</button>
-        <button id="btnOff" class="danger">Turn OFF</button>
+      <div class="muted" style="font-size:11px;text-align:right;max-width:280px">
+        read-only monitor &middot; the switch lives on the Mac, not here
       </div>
     </div>
   </div>
@@ -77,7 +76,7 @@
       <div class="d" id="mEquityD"></div></div>
     <div class="panel metric"><div class="k">Exposure</div><div class="v" id="mTarget">—</div>
       <div class="d" id="mTargetD"></div></div>
-    <div class="panel metric"><div class="k">GLD price</div><div class="v" id="mPrice">—</div>
+    <div class="panel metric"><div class="k">GLD price <span id="liveBadge"></span></div><div class="v" id="mPrice">—</div>
       <div class="d" id="mPriceD"></div></div>
     <div class="panel metric"><div class="k">Drawdown</div><div class="v" id="mDD">—</div>
       <div class="d" id="mDDD"></div></div>
@@ -113,9 +112,10 @@
 
   <div class="foot">
     <strong>Status source:</strong> <code id="statusSrc"></code><br>
-    This panel is display-only except for the switch. Turning the bot off writes
-    <code>runtime/control.json</code>; the local runner reads it on its next tick and moves
-    exposure to zero. Nothing here can place a real order.
+    <strong>Read-only.</strong> This page cannot change what the bot does — the on/off switch runs
+    on the Mac that holds the paper account. Decisions come from <code>runtime/status.json</code>
+    (published once per session); the price and equity above are revalued live and are a mark,
+    not a trade. Nothing here can place a real order.
   </div>
 
 <script>
@@ -174,8 +174,8 @@ async function load(){
     if(r.ok) status = await r.json();
   } catch(e){}
   try {
-    const r = await fetch(`/api/control?t=${Date.now()}`, {cache:"no-store"});
-    if(r.ok) control = await r.json();
+    const rc = await fetch(`${RAW}/control.json?t=${Date.now()}`, {cache:"no-store"});
+    if(rc.ok) control = await rc.json();
   } catch(e){}
 
   document.getElementById("statusSrc").textContent = `${RAW}/status.json`;
@@ -192,10 +192,7 @@ async function load(){
   document.getElementById("switchReason").textContent =
     (control && control.reason) ? control.reason : (status && status.enabled===false ? "exposure forced to zero" : "");
 
-  document.getElementById("btnOn").disabled  = enabled === true;
-  document.getElementById("btnOff").disabled = enabled === false;
-  document.getElementById("btnOn").onclick  = ()=>setControl(true);
-  document.getElementById("btnOff").onclick = ()=>setControl(false);
+  // No buttons by design: the page is a one-way display. See setControl().
 
   const alertBox = document.getElementById("alert");
   if(!status){
@@ -233,10 +230,11 @@ async function load(){
         const sub = isFlat ? "flat — no position"
                    : (w.basis === "reconstructed_intraday" ? "intraday marks"
                    : (w.basis === "includes_a_trade" ? "includes a trade" : ""));
+        const isAll = w.label === "all_time";
         return `<div class="panel metric">
           <div class="k">${esc(lab)}</div>
-          <div class="v ${cls}">${sign}${fmtMoney(w.pl_abs)}</div>
-          <div class="d">${sign}${(w.pl_pct*100).toFixed(2)}%${sub? " &middot; "+sub : ""}</div>
+          <div class="v ${cls}"${isAll? ' id="plAllVal"' : ""}>${sign}${fmtMoney(w.pl_abs)}</div>
+          <div class="d"${isAll? ' id="plAllSub"' : ""}>${sign}${(w.pl_pct*100).toFixed(2)}%${sub? " &middot; "+sub : ""}</div>
         </div>`;
       }).join("");
       document.getElementById("plNote").innerHTML =
@@ -248,7 +246,7 @@ async function load(){
     }
 
     document.getElementById("mPrice").textContent = fmtMoney(status.price);
-    document.getElementById("mPriceD").textContent = `as of ${esc(status.date)}`;
+    document.getElementById("mPriceD").textContent = `as of ${esc(status.date)}`;  // overwritten by the live layer when a quote is available
     const dd = status.drawdown_from_peak;
     document.getElementById("mDD").textContent = fmtPct(dd,2);
     document.getElementById("mDD").className = "v " + (dd < -0.1 ? "bad" : "good");
@@ -283,30 +281,101 @@ async function load(){
       : `<div class="muted">No paper fills yet.</div>`;
 
     drawChart(status.equity_curve || []);
+
+    // Everything above is the published record. From here the view is revalued at the
+    // live mark, so the numbers move between ticks without changing the history.
+    LAST = status;
+    if(QUOTE) revalue();
   } else {
     drawChart([]);
   }
 }
 
-async function setControl(enabled){
-  const btns=[document.getElementById("btnOn"),document.getElementById("btnOff")];
-  btns.forEach(b=>b.disabled=true);
+function setControl(){
+  alert("This monitor is read-only.\n\nThe on/off switch runs on the Mac that holds the " +
+        "paper account, so it can't be flipped from a public web page.\n\nLocally:\n" +
+        "  cd ~/Documents/GitHub/von-gold\n" +
+        "  env -u PYTHONPATH .venv/bin/python -m vongold.cli disable\n" +
+        "  env -u PYTHONPATH .venv/bin/python -m vongold.cli enable");
+}
+
+// ---------------------------------------------------------------------------
+// Live valuation.
+//
+// The strategy decides once a day, so status.json only changes on a tick. A page that
+// only reads it would sit frozen all day and look broken. So the *position* is revalued
+// against a live quote: equity = cash + shares x live price. The decision history stays
+// exactly as published -- nothing here can alter what the bot did, only what the mark is.
+// ---------------------------------------------------------------------------
+let LAST = null, QUOTE = null;
+
+function paintFreshness(q){
+  const b = document.getElementById("liveBadge");
+  if(!q || q.age_seconds == null){ b.textContent = ""; return; }
+  const age = q.age_seconds;
+  // Under 6 minutes is plausibly a live tape; beyond that it is the last close.
+  if(age < 360){
+    b.innerHTML = `<span style="color:#3fb950;font-size:10px">● live</span>`;
+  } else {
+    const h = Math.floor(age/3600), m = Math.round((age%3600)/60);
+    b.innerHTML = `<span style="color:#8b949e;font-size:10px">last close ${h}h ${m}m ago</span>`;
+  }
+}
+
+function revalue(){
+  if(!LAST || !QUOTE) return;
+  const cash = Number(LAST.cash ?? 0);
+  const shares = Number(LAST.position_shares ?? 0);
+  const price = Number(QUOTE.price);
+  if(!isFinite(price) || price <= 0) return;
+
+  const equity = cash + shares * price;
+  const start = Number(LAST.initial_capital || 10000);
+
+  document.getElementById("mPrice").textContent = fmtMoney(price);
+  if(QUOTE.market_time){
+    const mins = Math.round(QUOTE.age_seconds/60);
+    document.getElementById("mPriceD").textContent =
+      mins < 6 ? `live · updated ${mins}m ago`
+               : `last close · ${esc(String(QUOTE.market_time).slice(0,10))}`;
+  }
+
+  const eq = document.getElementById("mEquity");
+  eq.textContent = fmtMoney(equity);
+  eq.className = "v " + (equity >= start ? "good" : "bad");
+  document.getElementById("mEquityD").textContent =
+    `from ${fmtMoney(start)} • ${fmtPct(equity/start - 1, 2)} (at live price)`;
+
+  // Exposure is position value over equity, recomputed at the live mark.
+  const expo = equity > 0 ? (shares * price) / equity : 0;
+  document.getElementById("mTarget").textContent = fmtPct(expo, 0);
+
+  const pnl = equity - start;
+  const plAll = document.getElementById("plAllVal");
+  if(plAll){
+    plAll.textContent = (pnl >= 0 ? "+" : "-") + "$" + Math.abs(pnl).toFixed(2);
+    plAll.className = "v " + (pnl >= 0 ? "good" : "bad");
+    const sub = document.getElementById("plAllSub");
+    if(sub) sub.textContent = `${fmtPct(equity/start - 1, 2)} • live mark`;
+  }
+}
+
+async function loadQuote(){
   try{
-    const r = await fetch("/api/control",{
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({enabled, changed_by:"web-monitor"})
-    });
-    const j = await r.json().catch(()=>({}));
-    if(!r.ok){
-      alert("Could not update the switch.\n\n"+(j.error||r.status)+
-            "\n\nIf this is the first time, set GITHUB_TOKEN in the Vercel project settings.");
-    }
-  }catch(e){ alert("Network error updating the switch: "+e.message); }
-  load();
+    const r = await fetch(`/api/quote?symbol=${encodeURIComponent((LAST && LAST.symbol) || "GLD")}&t=${Date.now()}`, {cache:"no-store"});
+    if(!r.ok) return;
+    QUOTE = await r.json();
+    paintFreshness(QUOTE);
+    revalue();
+  }catch(e){}
 }
 
 load();
 setInterval(load, 60000);
+// Quote refresh is independent of the status poll: 20s keeps the number moving without
+// hammering the upstream (the endpoint caches for 20s server-side).
+setInterval(loadQuote, 20000);
+loadQuote();
 </script>
 </body>
 </html>

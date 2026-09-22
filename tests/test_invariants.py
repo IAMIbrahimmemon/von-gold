@@ -845,3 +845,84 @@ def test_pl_windows_cover_the_requested_labels(tmp_path):
     out = compute_pl(ledger_path=p, current_equity=10000.0, shares=0.0, intraday_bars=None)
     labels = [w["label"] for w in out["windows"]]
     assert labels == ["all_time", "past_24h", "past_6h", "past_hour"]
+
+
+# ---------------------------------------------------------------------------
+# Five-way action output (long / short / open / close / hold)
+# ---------------------------------------------------------------------------
+
+def test_action_criteria_are_a_dict_and_score_criteria_are_a_list():
+    """von's two question types take DIFFERENT criteria shapes, and getting it wrong fails
+    the whole decision with a pydantic ValidationError.
+
+    This is a real bug that silently voided an entire 270-day probe: `choice` wants a dict
+    of label -> condition, `score` wants a LIST of anchors. Pinning it here so it cannot
+    regress.
+    """
+    from vongold.action import QUESTION
+    assert isinstance(QUESTION["action"]["criteria"], dict), "choice criteria must be a dict"
+    assert isinstance(QUESTION["conviction"]["criteria"], list), "score criteria must be a list"
+    assert QUESTION["action"]["type"] == "choice"
+    assert QUESTION["conviction"]["type"] == "score"
+
+
+def test_action_labels_match_the_five_requested_actions():
+    """The five actions the user asked for, and the exposure each implies."""
+    from vongold.action import ACTIONS, ACTION_TARGET
+    assert set(ACTIONS) == {"open_long", "add_long", "hold", "reduce", "close"}
+    assert "short" not in ACTIONS, (
+        "short is deliberately absent: measured over 58 years it changed Sharpe by +0.002 "
+        "(4.88% -> 4.89% CAGR), because the above_ma gate is 0/1 and zeroes a short in a "
+        "downtrend. Offering it would imply an edge that measurement does not support."
+    )
+    assert ACTION_TARGET["hold"] is None, "hold must leave the mechanical target untouched"
+    assert ACTION_TARGET["close"] == 0.0
+
+
+def test_action_weight_defaults_to_zero_so_an_unvalidated_model_cannot_steer():
+    """The action output must be inert until it is validated.
+
+    A model that always answers the same label produces a constant overlay. At weight 0 the
+    mechanical target passes through unchanged, so such a model cannot move the account.
+    """
+    from vongold.action import ACTION_PRIOR_WEIGHT
+    assert ACTION_PRIOR_WEIGHT == 0.0, (
+        "the five-way action is unvalidated; its weight must default to 0 so it cannot "
+        "steer exposure before an A/B clears it"
+    )
+
+
+def test_blend_is_inert_at_weight_zero_and_bounded():
+    from vongold.action import Action, blend
+    act = Action(action="open_long", conviction=4.0)
+    t, why = blend(0.37, act, weight=0.0)
+    assert abs(t - 0.37) < 1e-12, "weight 0 must pass the mechanical target through"
+    # full weight moves toward the action's own target
+    t2, _ = blend(0.37, Action(action="close"), weight=1.0)
+    assert abs(t2 - 0.0) < 1e-12, "close at full weight must flatten"
+    # and the result is always within [0, 1]
+    for w in (0.0, 0.25, 0.5, 1.0):
+        for a in ("open_long", "add_long", "reduce", "close", "hold"):
+            tt, _ = blend(0.8, Action(action=a), weight=w)
+            assert 0.0 <= tt <= 1.0
+
+
+def test_blend_fails_closed_when_the_model_errors():
+    """An error must yield the mechanical target, never a guess in either direction."""
+    from vongold.action import Action, blend
+    t, why = blend(0.42, Action(error="von timed out"), weight=1.0)
+    assert abs(t - 0.42) < 1e-12
+    assert "no action" in why
+
+
+def test_live_loop_never_opens_a_position_without_allow_entry():
+    """The intraday re-decide loop is NOT backtested, so by default it may only reduce risk.
+
+    Opening or adding intraday would be trading a strategy with no evidence behind it. This
+    asserts the safety property that makes the loop safe to leave running.
+    """
+    from pathlib import Path as _P
+    src = (_P(__file__).resolve().parents[1] / "scripts" / "live_loop.py").read_text()
+    # the gate must consult allow_entry before accepting an entry action
+    assert '"open_long", "add_long") and args.allow_entry' in src
+    assert "ignored (entry disabled)" in src

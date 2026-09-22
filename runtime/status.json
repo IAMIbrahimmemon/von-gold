@@ -1,30 +1,34 @@
 {
-  "generated_at": "2026-09-22T04:41:53+00:00",
+  "generated_at": "2026-09-22T06:15:50+00:00",
   "symbol": "GLD",
   "enabled": true,
   "kill_switch_tripped": false,
   "date": "2026-09-21",
-  "price": 398.3800048828125,
+  "price": 398.3500061035156,
+  "signal_close": 398.3800048828125,
+  "mark": {
+    "price": 398.35,
+    "as_of": "2026-09-21T15:59:00-04:00",
+    "source": "yfinance 1m bar",
+    "is_intraday": false,
+    "market_open": false,
+    "age_minutes": 616.8
+  },
+  "spot": {
+    "spot_xau_usd": 4320.299805,
+    "updated_at": "2026-09-22T06:15:35Z",
+    "source": "gold-api.com"
+  },
+  "as_of": "2026-09-22T06:15:50+00:00",
   "target_exposure": 0.0,
   "mechanical_target": 0.0,
   "von_multiplier": 1.0,
   "position_shares": 0.0,
-  "cash": 9935.504255001699,
-  "equity": 9935.504255001699,
-  "drawdown_from_peak": -0.0069879757056425795,
+  "cash": 10000.0,
+  "equity": 10000.0,
+  "drawdown_from_peak": 0.0,
   "traded": false,
-  "von": {
-    "regime": "range",
-    "regime_confidence": 0.523,
-    "long_prob": 0.0527,
-    "risk_prob": 0.5351,
-    "conviction": 2.21,
-    "usage": {
-      "input_tokens": 294,
-      "output_tokens": 4
-    },
-    "transport": "subprocess"
-  },
+  "von": null,
   "von_error": null,
   "inputs": {
     "vol_21d_ann": 0.2387583757514646,
@@ -34,136 +38,58 @@
     "dollar_support": true,
     "real_yield_10y": null
   },
-  "recent_fills": [
-    {
-      "ts": "2026-09-22T04:02:59+00:00",
-      "kind": "fill",
-      "date": "2026-08-19",
-      "price": 413.8399963378906,
-      "shares": 4.629024918177256,
-      "cash": 8083.749642116964,
-      "traded": true,
-      "delta_value": 1915.6756551864803,
-      "delta_shares": 4.629024918177256,
-      "cost": 0.5747026965559441,
-      "equity_before": 10000.0,
-      "equity_after": 9999.425297303445
-    },
-    {
-      "ts": "2026-09-22T04:02:59+00:00",
-      "kind": "fill",
-      "date": "2026-08-20",
-      "price": 415.260009765625,
-      "shares": 0.0,
-      "cash": 10005.421900164754,
-      "traded": true,
-      "delta_value": -1922.248932727609,
-      "delta_shares": -4.629024918177256,
-      "cost": 0.5766746798182827,
-      "equity_before": 10005.998574844572,
-      "equity_after": 10005.421900164754
-    },
-    {
-      "ts": "2026-09-22T04:02:59+00:00",
-      "kind": "fill",
-      "date": "2026-08-21",
-      "price": 423.3599853515625,
-      "shares": 4.749954351701048,
-      "cash": 7993.878013226581,
-      "traded": true,
-      "delta_value": 2010.940604756746,
-      "delta_shares": 4.749954351701048,
-      "cost": 0.6032821814270238,
-      "equity_before": 10005.421900164754,
-      "equity_after": 10004.818617983326
-    },
-    {
-      "ts": "2026-09-22T04:02:59+00:00",
-      "kind": "fill",
-      "date": "2026-08-28",
-      "price": 408.8900146484375,
-      "shares": 0.0,
-      "cash": 9935.504255001699,
-      "traded": true,
-      "delta_value": -1942.2089044464508,
-      "delta_shares": -4.749954351701048,
-      "cost": 0.5826626713339352,
-      "equity_before": 9936.086917673032,
-      "equity_after": 9935.504255001699
-    }
-  ],
-  "equity_curve": [
-    {
-      "ts": "2026-09-22T04:02:59+00:00",
-      "equity": 9999.425297303445,
-      "date": "2026-08-19"
-    },
-    {
-      "ts": "2026-09-22T04:02:59+00:00",
-      "equity": 10005.421900164754,
-      "date": "2026-08-20"
-    },
-    {
-      "ts": "2026-09-22T04:02:59+00:00",
-      "equity": 10004.818617983326,
-      "date": "2026-08-21"
-    },
-    {
-      "ts": "2026-09-22T04:02:59+00:00",
-      "equity": 9935.504255001699,
-      "date": "2026-08-28"
-    }
-  ],
+  "recent_fills": [],
+  "equity_curve": [],
   "pl": {
     "windows": [
       {
         "label": "all_time",
-        "pl_abs": -64.5,
-        "pl_pct": -0.00645,
+        "pl_abs": 0.0,
+        "pl_pct": 0.0,
         "start_equity": 10000.0,
-        "end_equity": 9935.5,
+        "end_equity": 10000.0,
         "basis": "reconstructed",
         "note": "against the $10,000 starting stake"
       },
       {
         "label": "past_24h",
-        "pl_abs": -64.5,
-        "pl_pct": -0.00645,
+        "pl_abs": 0.0,
+        "pl_pct": 0.0,
         "start_equity": 10000.0,
-        "end_equity": 9935.5,
-        "basis": "includes_a_trade",
-        "note": "a trade occurred in this window"
+        "end_equity": 10000.0,
+        "basis": "flat_no_exposure",
+        "note": "flat for this whole window -- no position was open, so no gain or loss was possible (this is not the same as the bot being off)"
       },
       {
         "label": "past_6h",
-        "pl_abs": -64.5,
-        "pl_pct": -0.00645,
+        "pl_abs": 0.0,
+        "pl_pct": 0.0,
         "start_equity": 10000.0,
-        "end_equity": 9935.5,
-        "basis": "includes_a_trade",
-        "note": "a trade occurred in this window"
+        "end_equity": 10000.0,
+        "basis": "flat_no_exposure",
+        "note": "flat for this whole window -- no position was open, so no gain or loss was possible (this is not the same as the bot being off)"
       },
       {
         "label": "past_hour",
-        "pl_abs": -64.5,
-        "pl_pct": -0.00645,
+        "pl_abs": 0.0,
+        "pl_pct": 0.0,
         "start_equity": 10000.0,
-        "end_equity": 9935.5,
-        "basis": "includes_a_trade",
-        "note": "a trade occurred in this window"
+        "end_equity": 10000.0,
+        "basis": "flat_no_exposure",
+        "note": "flat for this whole window -- no position was open, so no gain or loss was possible (this is not the same as the bot being off)"
       }
     ],
     "initial_capital": 10000.0,
-    "current_equity": 9935.5,
-    "total_pl_abs": -64.5,
-    "total_pl_pct": -0.00645,
+    "current_equity": 10000.0,
+    "total_pl_abs": 0.0,
+    "total_pl_pct": 0.0,
     "shares": 0.0,
-    "ledger_events": 11,
-    "fills": 4,
+    "ledger_events": 2,
+    "fills": 0,
     "mark_source": "no position",
     "intraday_marks": false,
-    "first_fill_ts": "2026-09-22T04:02:59+00:00",
-    "last_fill_ts": "2026-09-22T04:02:59+00:00",
-    "generated_at": "2026-09-22T04:41:53.588264+00:00"
+    "first_fill_ts": null,
+    "last_fill_ts": null,
+    "generated_at": "2026-09-22T06:15:50.953946+00:00"
   }
 }

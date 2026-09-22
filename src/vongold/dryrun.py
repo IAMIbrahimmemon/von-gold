@@ -30,6 +30,7 @@ import pandas as pd
 from .backtest import run_backtest
 from .config import CostModel, StrategyParams
 from .data import build_dataset
+from .live import fetch_live_mark, spot_cross_check
 from .pl import compute_pl
 from .state_store import Control, Ledger, PositionStore, read_status, utcnow, write_status
 from .strategy import build_features, mechanical_exposure
@@ -202,11 +203,23 @@ def run_once(
                             symbol=control.symbol)
 
     pos = store.state
-    price = decision["close"]
+
+    # SIGNAL vs MARK. The decision is made on the daily close (unchanged: reading intraday
+    # bars would change what the strategy means and invalidate the backtest). But the paper
+    # account is valued and executed at the latest live price, so a held position shows its
+    # real current worth instead of yesterday's number all day.
+    signal_price = decision["close"]
+    mark = fetch_live_mark(control.symbol)
+    if mark is not None:
+        price = mark.price
+    else:
+        # No live quote: value at the last known price rather than inventing one.
+        price = pos.last_price if pos.last_price > 0 else signal_price
+        mark = None
 
     # --- Drawdown kill switch, evaluated BEFORE any trading ---
     peak = max([p.get("equity_after", 0.0) for p in ledger.all() if p.get("kind") == "fill"] + [pos.equity, 0.0])
-    equity_now = pos.cash + pos.shares * price
+    equity_now = pos.cash + pos.shares * price  # price is the live mark here
     dd = (equity_now / peak - 1.0) if peak > 0 else 0.0
     killed = dd < -abs(control.kill_if_drawdown_exceeds)
     if killed:
@@ -231,7 +244,9 @@ def run_once(
         mechanical_target=decision["mechanical_target"],
         von_multiplier=decision["von_multiplier"],
         final_target=target,
-        close=price,
+        close=signal_price,
+        mark=price,
+        mark_source=(mark.source if mark else "last known"),
         inputs=decision["inputs"],
         von=decision["von"],
         von_error=decision["von_error"],
@@ -252,6 +267,10 @@ def run_once(
         "kill_switch_tripped": killed,
         "date": decision["date"],
         "price": price,
+        "signal_close": signal_price,
+        "mark": (mark.as_dict() if mark else None),
+        "spot": spot_cross_check(),
+        "as_of": utcnow(),
         "target_exposure": target,
         "mechanical_target": decision["mechanical_target"],
         "von_multiplier": decision["von_multiplier"],
