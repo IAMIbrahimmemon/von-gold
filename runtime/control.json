@@ -1,7 +1,7 @@
 {
   "enabled": true,
-  "reason": "dry run active",
-  "changed_at": "2026-09-22T04:02:53+00:00",
+  "reason": "manual CLI toggle",
+  "changed_at": "2026-09-22T04:19:14+00:00",
   "changed_by": "cli",
   "max_exposure": 1.0,
   "kill_if_drawdown_exceeds": 0.25,
