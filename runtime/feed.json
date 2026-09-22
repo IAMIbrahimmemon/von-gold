@@ -1,6 +1,6 @@
 {
  "symbol": "GLD",
- "generated_at": "2026-09-22T07:03:45+00:00",
+ "generated_at": "2026-09-22T07:09:28+00:00",
  "interval_source": "live_loop",
  "price": 398.35,
  "mark": {
@@ -9,13 +9,613 @@
   "source": "yfinance 1m bar",
   "is_intraday": false,
   "market_open": false,
-  "age_minutes": 664.6
+  "age_minutes": 670.3
  },
  "mechanical_target": 0.0,
  "equity": 10000.0,
  "cash": 10000.0,
  "shares": 0.0,
  "decisions": [
+  {
+   "ts": "2026-09-22T07:09:28+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 9493,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 670.3
+  },
+  {
+   "ts": "2026-09-22T07:09:18+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 18895,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 670.0
+  },
+  {
+   "ts": "2026-09-22T07:08:59+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 9762,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 669.8
+  },
+  {
+   "ts": "2026-09-22T07:08:49+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10442,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 669.7
+  },
+  {
+   "ts": "2026-09-22T07:08:39+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10706,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 669.5
+  },
+  {
+   "ts": "2026-09-22T07:08:28+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10470,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 669.3
+  },
+  {
+   "ts": "2026-09-22T07:08:18+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 12314,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 669.1
+  },
+  {
+   "ts": "2026-09-22T07:08:05+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 12343,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 668.9
+  },
+  {
+   "ts": "2026-09-22T07:07:53+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10790,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 668.7
+  },
+  {
+   "ts": "2026-09-22T07:07:41+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 11047,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 668.5
+  },
+  {
+   "ts": "2026-09-22T07:07:31+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10955,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 668.3
+  },
+  {
+   "ts": "2026-09-22T07:07:20+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 11544,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 668.2
+  },
+  {
+   "ts": "2026-09-22T07:07:09+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 11145,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 668.0
+  },
+  {
+   "ts": "2026-09-22T07:06:57+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10176,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 667.8
+  },
+  {
+   "ts": "2026-09-22T07:06:47+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10156,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 667.6
+  },
+  {
+   "ts": "2026-09-22T07:06:37+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 11114,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 667.4
+  },
+  {
+   "ts": "2026-09-22T07:06:26+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 11678,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 667.2
+  },
+  {
+   "ts": "2026-09-22T07:06:14+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10322,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 667.1
+  },
+  {
+   "ts": "2026-09-22T07:06:04+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 11318,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 666.9
+  },
+  {
+   "ts": "2026-09-22T07:05:52+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10849,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 666.7
+  },
+  {
+   "ts": "2026-09-22T07:05:42+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10421,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 666.5
+  },
+  {
+   "ts": "2026-09-22T07:05:31+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 9879,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 666.4
+  },
+  {
+   "ts": "2026-09-22T07:05:21+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10997,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 666.2
+  },
+  {
+   "ts": "2026-09-22T07:05:10+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 12333,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 666.0
+  },
+  {
+   "ts": "2026-09-22T07:04:58+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 11771,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 665.8
+  },
+  {
+   "ts": "2026-09-22T07:04:46+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 12061,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 665.6
+  },
+  {
+   "ts": "2026-09-22T07:04:34+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10439,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 665.4
+  },
+  {
+   "ts": "2026-09-22T07:04:24+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 10497,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 665.2
+  },
+  {
+   "ts": "2026-09-22T07:04:13+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 11532,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 665.0
+  },
+  {
+   "ts": "2026-09-22T07:04:01+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 11175,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 664.8
+  },
   {
    "ts": "2026-09-22T07:03:45+00:00",
    "price": 398.3500061035156,
@@ -615,606 +1215,6 @@
    "applied": "ignored (entry disabled)",
    "market_open": false,
    "age_minutes": 659.3
-  },
-  {
-   "ts": "2026-09-22T06:58:11+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 9702,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 659.0
-  },
-  {
-   "ts": "2026-09-22T06:58:01+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10533,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 658.9
-  },
-  {
-   "ts": "2026-09-22T06:57:51+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 11479,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 658.7
-  },
-  {
-   "ts": "2026-09-22T06:57:39+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10188,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 658.5
-  },
-  {
-   "ts": "2026-09-22T06:57:29+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10081,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 658.3
-  },
-  {
-   "ts": "2026-09-22T06:57:19+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10466,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 658.2
-  },
-  {
-   "ts": "2026-09-22T06:57:09+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10689,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 658.0
-  },
-  {
-   "ts": "2026-09-22T06:56:58+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 12059,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 657.8
-  },
-  {
-   "ts": "2026-09-22T06:56:44+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 8244,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 657.6
-  },
-  {
-   "ts": "2026-09-22T06:56:33+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 8168,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 657.4
-  },
-  {
-   "ts": "2026-09-22T06:56:23+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 7752,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 657.3
-  },
-  {
-   "ts": "2026-09-22T06:56:15+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10651,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 657.1
-  },
-  {
-   "ts": "2026-09-22T06:56:05+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10763,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 656.9
-  },
-  {
-   "ts": "2026-09-22T06:55:52+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 8354,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 656.7
-  },
-  {
-   "ts": "2026-09-22T06:55:42+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 8188,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 656.6
-  },
-  {
-   "ts": "2026-09-22T06:55:31+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 7352,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 656.4
-  },
-  {
-   "ts": "2026-09-22T06:55:23+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 9704,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 656.2
-  },
-  {
-   "ts": "2026-09-22T06:55:12+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 9576,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 656.1
-  },
-  {
-   "ts": "2026-09-22T06:55:03+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 9853,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 655.9
-  },
-  {
-   "ts": "2026-09-22T06:54:52+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 9975,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 655.7
-  },
-  {
-   "ts": "2026-09-22T06:54:41+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 8898,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 655.5
-  },
-  {
-   "ts": "2026-09-22T06:54:32+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10100,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 655.4
-  },
-  {
-   "ts": "2026-09-22T06:54:22+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 11519,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 655.2
-  },
-  {
-   "ts": "2026-09-22T06:54:11+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 12943,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 655.0
-  },
-  {
-   "ts": "2026-09-22T06:53:58+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10236,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 654.8
-  },
-  {
-   "ts": "2026-09-22T06:53:47+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10185,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 654.6
-  },
-  {
-   "ts": "2026-09-22T06:53:37+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 10091,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 654.5
-  },
-  {
-   "ts": "2026-09-22T06:53:27+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 9792,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 654.3
-  },
-  {
-   "ts": "2026-09-22T06:53:14+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 7607,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 654.1
-  },
-  {
-   "ts": "2026-09-22T06:53:06+00:00",
-   "price": 398.3500061035156,
-   "action": "add_long",
-   "confidence": 0.068,
-   "probabilities": {
-    "open_long": 0.0296,
-    "add_long": 0.3785,
-    "hold": 0.3108,
-    "reduce": 0.1899,
-    "close": 0.0912
-   },
-   "conviction": 2.15,
-   "latency_ms": 11515,
-   "state_changed": true,
-   "cached": false,
-   "applied": "ignored (entry disabled)",
-   "market_open": false,
-   "age_minutes": 653.9
   }
  ]
 }
