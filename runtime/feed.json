@@ -1,6 +1,6 @@
 {
  "symbol": "GLD",
- "generated_at": "2026-09-22T07:20:30+00:00",
+ "generated_at": "2026-09-22T07:20:45+00:00",
  "mode": "live-signals",
  "price": 398.35,
  "mark": {
@@ -9,7 +9,7 @@
   "source": "yfinance 1m bar",
   "is_intraday": false,
   "market_open": false,
-  "age_minutes": 681.3
+  "age_minutes": 681.5
  },
  "target_exposure": 0.0,
  "mechanical_target": 0.0,
@@ -23,6 +23,35 @@
  "fills": 0,
  "flat_reason": "live price 398.35 is below its trend gate",
  "decisions": [
+  {
+   "ts": "2026-09-22T07:20:45+00:00",
+   "price": 398.35,
+   "action": "add_long",
+   "confidence": 0.06,
+   "probabilities": {
+    "open_long": 0.0339,
+    "add_long": 0.3623,
+    "hold": 0.3022,
+    "reduce": 0.2062,
+    "close": 0.0954
+   },
+   "conviction": 2.27,
+   "latency_ms": 14916,
+   "cached": false,
+   "target_exposure": 0.0,
+   "mechanical_target": 0.0,
+   "traded": false,
+   "delta_shares": 0.0,
+   "cost": 0.0,
+   "shares": 0.0,
+   "cash": 10000.0,
+   "equity": 10000.0,
+   "pnl": 0.0,
+   "pnl_pct": 0.0,
+   "market_open": false,
+   "age_minutes": 681.5,
+   "signal": "live price 398.35 is below its trend gate"
+  },
   {
    "ts": "2026-09-22T07:20:30+00:00",
    "price": 398.35,
