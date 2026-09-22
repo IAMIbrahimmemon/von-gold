@@ -2,6 +2,7 @@
   "name": "von-gold-monitor",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Read-only monitor for the von-gold dry-run trading system",
   "engines": {
     "node": ">=20"
