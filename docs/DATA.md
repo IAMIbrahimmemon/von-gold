@@ -8,10 +8,24 @@ Anything not verified is marked as such. No endpoint here needs an API key.
 | Source | URL | Status | Depth | Notes |
 |---|---|---|---|---|
 | Yahoo chart, GLD | `https://query1.finance.yahoo.com/v8/finance/chart/GLD?range=10y&interval=1d` | **200** | 10y daily, 2,512 bars | Primary gold ETF series |
-| Yahoo chart, IAU | `https://query1.finance.yahoo.com/v8/finance/chart/IAU?range=10y&interval=1d` | **200** | 10y daily | Cheaper expense ratio twin of GLD; cross-check |
+| Yahoo chart, GLD, `range=max` | same endpoint with `range=max` | **429 / silent-short** | unreliable | **Do not trust this.** See the warning below. |
+| yfinance, GLD, `period=max` | `yfinance` package, daily | **200** | **5,493 bars, 2004-11-18 → 2026-09-21** | The working way to get full GLD history. Cached to `data/processed/gld_yfinance_max.parquet`. |
+| Nasdaq historical API, GLD | `https://api.nasdaq.com/api/quote/GLD/historical?assetclass=etf&fromdate=2004-01-01&limit=9999` | **200** | 2,513 rows | **Independent cross-check.** Agrees with Yahoo to the cent on 2026-09-21 (398.38) and on the 2016 open (127.27). Use it to validate Yahoo. |
+| LBMA gold PM fix | local file `data/raw/lbma_gold_pm.json` (committed, 915KB) | **on disk** | **14,687 daily, 1968-04-01 → 2026-09-21** | **58 years** of spot gold. The only way to test against the 1980-2000 and 2013-2015 secular bears. |
+| Yahoo chart, IAU | `https://query1.finance.yahoo.com/v8/finance/chart/IAU?range=10y&interval=1d` | **200** | 10y daily | Cheaper expense-ratio twin of GLD; cross-check |
 | Yahoo chart, GC=F | `https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=10y&interval=1d` | **200** | 10y daily (continuous futures) | Closest to spot gold; has roll artefacts |
 | Yahoo chart, XAUUSD=X | `https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X` | **404** | — | Does **not** work; don't build on it |
 | Stooq CSV | `https://stooq.com/q/d/l/?s=xauusd&i=d` | **blocked** | — | Returns a JavaScript proof-of-work bot wall, not CSV |
+
+### ⚠️ Yahoo silently returns a SHORT series, not an error
+
+Observed in practice: `range=max` returned **200 OK with 263 rows** instead of ~5,500, and
+later returned hard **429**s. A caller that trusts the status code gets a truncated price
+history and a corrupted backtest with no warning from anywhere.
+
+`fetch_yahoo_daily(..., min_rows=N)` now turns that into a loud `RuntimeError` instead, and
+`build_dataset` demands ≥4,000 rows for `max`/`30y` requests. Prefer `yfinance` for full
+history, and cross-check the last close against Nasdaq's independent API.
 
 Requires a `User-Agent` header. Without one Yahoo may refuse.
 
@@ -36,13 +50,15 @@ the strategy should look *better* there, and if it does not, something is wrong.
 | `CPIAUCSL` | CPI, monthly | **200** | Inflation backdrop |
 | `DTWEXBGS` | Broad trade-weighted dollar index | **200** | Currency headwind |
 
-`DTWEXBGS` is published weekly and lagged; `DFII10` and `DGS10` daily. All are
-forward-filled onto the trading calendar in `data.py`. **Forward-filling is a
-no-lookahead-safe alignment for a decision made before the next release** — but the
-publication lag is real (a FRED observation dated Friday may not have been visible
-until the following week). This is a known, small optimism in the backtest. A stricter
-build would shift each series by its actual release lag; that is listed as future work
-rather than silently assumed away.
+Publication lag is real anyway (a FRED observation dated Friday may not have been visible
+until the following week) — a known, small optimism in the backtest. A stricter build would
+shift each series by its actual release lag; that is listed as future work rather than
+silently assumed away.
+
+**Note:** as of the long-history work, both macro filters are OFF by default because a
+lagged A/B showed them *removing* Sharpe (see `docs/STRATEGY.md`). These series are still
+fetched and reported on the dashboard; they no longer gate the position. That removes the
+publication-lag optimism from the *result* (it only affects reporting now).
 
 ## News
 

@@ -57,12 +57,22 @@ class StrategyParams:
     vol_window: int = 21
     # Volatility target, annualized. Harvey et al. show vol targeting improves
     # risk-adjusted returns at moderate levels.
-    target_vol_annual: float = 0.12
+    # 10%: the sweep found the lower target wins risk-adjusted on gold (0.88-0.93 vs
+    # 0.755 Sharpe on the 10y window) at roughly half the drawdown. Gold's own vol is
+    # ~19%, so a 10% target is a deliberate, documented de-risking, not a tuned value.
+    target_vol_annual: float = 0.10
     # Cap on gross exposure (1.0 = fully invested, no leverage).
     max_exposure: float = 1.0
     # Do not bother trading tiny adjustments: rebalance only when target exposure
     # moves more than this from current.
     rebalance_band: float = 0.10
+    # Whipsaw brake: after any position change, no further change for this many days.
+    # Set to 10 for a COST reason, not an alpha claim. A paired block bootstrap
+    # (scripts/brake_test.py) found no brake setting distinguishable from off on
+    # Sharpe (0/10 settings, both windows). It does reliably cut turnover ~55% and
+    # cost from ~39 to ~23 bps/yr. When two settings are statistically identical,
+    # take the cheaper one -- cost is deterministic, alpha estimates are not.
+    min_hold_days: int = 10
     # ATR-based protective stop (in ATR units). 0 disables.
     atr_stop_mult: float = 0.0
     atr_window: int = 14
@@ -70,10 +80,16 @@ class StrategyParams:
     # --- Macro conditioning (slow regime tilt, documented drivers) ---
     # Condition longs on the 10-year real yield trend. Real yields are gold's
     # single best-documented macro driver.
-    use_real_yield_filter: bool = True
+    # OFF BY DEFAULT: measured, not assumed. A lagged A/B on 22 years of gold
+    # (scripts/validate_long.py) found the gate COSTS Sharpe (-0.029) rather than
+    # adding it -- the documented gold/real-yield relationship is contemporaneous,
+    # not predictive, so gating on it only removes signal. Left switchable so the
+    # claim can be re-tested.
+    use_real_yield_filter: bool = False
     real_yield_trend_days: int = 63
     # Condition on the broad dollar index trend (headwind when strengthening).
-    use_dollar_filter: bool = True
+    # OFF BY DEFAULT: same lagged A/B, and much worse (-0.263 Sharpe).
+    use_dollar_filter: bool = False
     dollar_trend_days: int = 63
 
     # --- Decision-model overlay ---

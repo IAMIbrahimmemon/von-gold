@@ -6,7 +6,12 @@ __pycache__/
 .pytest_cache/
 
 # Data: large and regenerable. The parquet cache and raw payloads stay local.
-data/raw/
+# NOTE: this must ignore data/raw/* (not data/raw/) -- git will not descend into an
+# ignored directory, so a "!file" negation inside an ignored dir silently does nothing.
+data/raw/*
+# ...except the 58-year LBMA gold series (915KB). The long-history result depends on it
+# and it has no cheap re-fetch, so it ships with the repo.
+!data/raw/lbma_gold_pm.json
 data/processed/*.parquet
 data/processed/*.jsonl
 hf_orig/

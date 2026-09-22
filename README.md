@@ -5,26 +5,41 @@ your local **von** decision model (395M MLX, ~18ms, **zero LLM tokens**) — wit
 honest finding that von does not improve it, and a mechanical strategy that does what a
 professional trend-following program would do.
 
+Over **58 years of gold** (LBMA, 1968-2026, 14,687 daily bars — includes the 1980-2000
+secular bear and the 2013-2015 bear):
+
 ```
-Buy & hold GLD        11.65% CAGR   Sharpe 0.76   max DD -26.5%
-von-gold mechanical    5.83% CAGR   Sharpe 0.79   max DD -18.0%
+                          CAGR    Vol    Sharpe   max DD    time in market
+Buy & hold gold           8.04%   19.3%   0.497    -72.5%       100%
+von-gold mechanical       4.88%    7.1%   0.710    -21.8%        50%
 ```
 
-**Read that honestly: it does not beat buy-and-hold on return. It beats it on
-risk-adjusted return and roughly halves the drawdown, at the cost of about half the
-return.** That is what a real trend-following overlay looks like on a single commodity.
-Any pitch promising a system that "always comes out as a win" is describing a backtest
-nobody stress-tested — see `docs/STRATEGY.md` for the statistical tests this one fails
-and passes.
+**Read that honestly:** it does not beat buy-and-hold on return — it gives up ~3-5%/yr.
+It beats it on **drawdown**, cutting -72.5% to -21.8%, and its Sharpe point estimate is
+higher (0.710 vs 0.497) though the bootstrap confidence intervals overlap, so that
+advantage is **not statistically significant**. The drawdown reduction is the large,
+reliable effect.
+
+**Nobody can build a strategy that always wins.** Gold fell 72% once and stayed down for
+twenty years. Any pitch promising a system that "always comes out as a win" is describing
+a backtest nobody stress-tested — see `docs/STRATEGY.md` for the tests this one passes and
+fails, including the negative results.
 
 ## The one-paragraph version
 
 Gold trends and it has no cash flow, so what moves it is (a) its own price momentum and
-(b) the 10-year real yield, which is its literal opportunity cost. The bot holds gold
-when trend and macro regime agree, sizes the position by volatility, and sits flat
-otherwise. Decision made at day *t*'s close, filled at day *t+1*'s close, with 6bps of
-round-trip costs charged. Long-only, unlevered. Runs once per session on the Mac, writes
-its state to a file, and a Vercel page shows you how it's doing with an on/off switch.
+(b) the 10-year real yield, which is its literal opportunity cost. The bot holds gold when
+its own trend is up (price above the 200-day average), sizes the position by volatility
+targeting 10% annualised, and sits flat otherwise — going in and out repeatedly is the
+mechanism, not a defect. Decision made at day *t*'s close, filled at day *t+1*'s close,
+with 6bps round-trip costs charged. Long-only, unlevered. Runs once per session on the
+Mac, writes its state to a file, and a Vercel page shows you how it's doing with an
+on/off switch.
+
+Note what is *not* in there: the macro filters. Real yields and the dollar are gold's
+best-documented drivers, so they were built in first — then tested properly and found to
+**hurt** on a lagged basis (-0.054 and -0.281 Sharpe). The documented relationship is
+contemporaneous, which is description, not tradeable edge. They are off by default.
 
 ## Quick start
 
@@ -44,7 +59,10 @@ env -u PYTHONPATH .venv/bin/python -c "import sys;sys.path.insert(0,'src');from 
 env -u PYTHONPATH .venv/bin/python -c "import sys;sys.path.insert(0,'src');from vongold.dryrun import main;sys.argv=['x','--disable','--force'];main()"
 
 # tests
-env -u PYTHONPATH .venv/bin/python -m pytest tests -q      # 24 passing
+env -u PYTHONPATH .venv/bin/python -m pytest tests -q      # 34 passing
+
+# the long-history harness (58 years) -- this is the one that matters
+env -u PYTHONPATH .venv/bin/python scripts/long_history.py
 ```
 
 **Always `env -u PYTHONPATH`.** A Hermes/agent session exports a `PYTHONPATH` that points
@@ -69,7 +87,7 @@ subprocess has no lifecycle and cannot be left accidentally down.
 
 | File | Role |
 |---|---|
-| `src/vongold/data.py` | Yahoo daily prices + FRED macro series, cached to parquet |
+| `src/vongold/data.py` | Yahoo/FRED/LBMA loaders, with silent-failure guards |
 | `src/vongold/strategy.py` | Trend + vol-targeting signal, macro gates, rebalance band |
 | `src/vongold/backtest.py` | Event-driven backtester with real costs, metrics |
 | `src/vongold/experiments.py` | Ablation, sweeps, walk-forward, Deflated Sharpe, bootstrap |
@@ -153,12 +171,20 @@ this channel must be accumulated forward — which is what the running dry run d
 
 ## What did not work (kept honest)
 
-1. **Dollar-index filter** — Sharpe 0.73 → **0.44**. The dollar and gold are correlated
-   enough that the filter duplicated the price trend while lagging it.
-2. **ATR trailing stop** — did nothing; the 200-day gate already exits on those days.
-3. **Momentum sign as the main driver** — flat 79% of the time; averaging four lookbacks
-   gives exactly 0 whenever the windows disagree, which is often.
-4. **Real-yield filter as a return source** — value-neutral. A modest tilt only.
+1. **Both macro filters, tested with the correct lag** — real-yield gate **-0.054**
+   Sharpe, dollar gate **-0.281**. The published gold/real-rate relationship is
+   contemporaneous (corr -0.248 same-day) and carries nothing at a 1-day lag (-0.012).
+   Description, not edge.
+2. **The whipsaw brake as an alpha tool** — a paired block bootstrap found **0 of 10**
+   hold settings distinguishable from off. The sweep's scatter across hold lengths (0.729
+   / 0.725 / 0.629 / 0.662 / 0.634) is the signature of noise. Retained at 10 days purely
+   because it cuts cost ~55% (39 → 23 bps/yr) between two statistically identical
+   settings.
+3. **ATR trailing stop** — did nothing; the 200-day gate already exits on those days.
+4. **A dollar-value filter** — Sharpe 0.73 → **0.44**.
+5. **Momentum sign as the main driver** — flat most of the time; averaging four lookbacks
+   gives exactly 0 whenever the windows disagree, which is often. More useful as a risk
+   reducer than a return driver.
 
 ## Deployment (not yet done — needs your go-ahead)
 
@@ -181,14 +207,20 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.vongold.dryrun.pli
 
 **Verified (actually executed):**
 
-* 24/24 invariant tests pass, including the two no-lookahead checks
-* Backtests over 2,512 real GLD bars; ablation, 108-config sweep, walk-forward, bootstrap
-  and Deflated Sharpe all run on real data
+* **34/34** invariant tests pass, including the two no-lookahead checks, the kill-switch
+  ordering regression, and the "defaults encode measured findings" test
+* Every documented number regenerates from `scripts/*.py` on the shipped defaults — no
+  parameter overrides hiding in the scripts that produced the tables
+* Backtests over **14,687 real LBMA bars (58y)** and 5,493 real GLD bars (22y): headline,
+  macro-gate A/B, overfitting battery, brake bootstrap, 40-config family sweep — all on
+  real data
 * 2,252 von decisions + 300 calibration probes, **0 errors**, in-process on MLX
 * Live tick end-to-end: switch ON → von answered (294 tokens) → correct flat decision;
   switch OFF → exposure collapsed to zero
 * Fill simulator round-trip conserves cash minus exactly 2× the cost
 * Dashboard rendered in headless Chrome with real status data
+* Independent cross-check of the live decision: GLD last 398.38 vs 200d MA 416.28 →
+  below the gate; 21d vol 23.9% → correct flat position, matching the backtest engine
 
 **Validated (checked, not executed):**
 
@@ -200,15 +232,19 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.vongold.dryrun.pli
 **Known gaps, stated plainly:**
 
 * FRED series are forward-filled without modelling publication lag — a small optimism.
-* The 2016→2026 window is a mostly-bullish decade for gold; the long-only restriction
-  flatters the result and no 2013-2015 bear market is in sample.
-* News features cannot be backtested for lack of honest history; they are measured, not used.
-* The strategy's own Sharpe is **not** statistically distinguishable from zero
-  (bootstrap CI [-0.015, 0.072] includes zero). The *family* — trend + vol targeting on
-  gold — does clear the Deflated Sharpe bar at 108 trials. That distinction is the point.
+* **The Sharpe edge over buy-and-hold is NOT statistically significant** — strategy CI
+  [0.458, 0.986] overlaps buy & hold's [0.245, 0.757], even over 58 years. The strategy's
+  own Sharpe excludes zero (PSR 1.0000) and clears Deflated Sharpe at 12 declared trials,
+  but "beats buy & hold on Sharpe" is not established. The drawdown claim is.
+* ~3-5%/yr of return is deliberately given up. This is a risk-reduction strategy.
+* 26 losing years out of 59; worst year -10.6%. Positive months only 33%.
+* In the 1980-2000 bear the strategy does **not** beat buy & hold on Sharpe (+/-0.01 at
+  -0.10 vs -0.09) — it wins there only on drawdown (-21.8% vs -72.5%).
+* News features cannot be backtested for lack of honest history; measured, not used.
+* `allow_short` exists but is untested (would matter in a decade like 1980-2000).
 
 ## Docs
 
-* `docs/STRATEGY.md` — the strategy, every component's justification, the negative results, citations
+* `docs/STRATEGY.md` — the strategy, every component's justification, the negative results, citations, and the honest limits
 * `docs/VON.md` — the full overlay write-up and how to reproduce it
 * `docs/DATA.md` — every data endpoint, verified with status codes

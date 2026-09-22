@@ -393,3 +393,204 @@ def test_vol_targeting_scales_down_in_high_vol():
         f = build_features(df, p)
         sizes.append(float(mechanical_exposure(f, p).iloc[-1]))
     assert sizes[0] > sizes[1], f"calm size {sizes[0]} not greater than wild size {sizes[1]}"
+
+
+# ------------------------------------------------------- long-history data loaders
+
+def test_lbma_loader_shape_and_known_print():
+    """The 58-year series must parse, be monotonic in time, and contain a known price.
+
+    Sanity-checking against an external fact (gold's ~$1,895 autumn-2011 peak) is what
+    separates "the file parsed" from "the file is the right file".
+    """
+    import pytest
+
+    from vongold.data import load_lbma_gold
+
+    try:
+        df = load_lbma_gold()
+    except FileNotFoundError:
+        pytest.skip("LBMA series not present on this machine")
+
+    assert len(df) > 10_000, "expected decades of daily observations"
+    assert df.index.is_monotonic_increasing
+    assert df["close"].notna().all()
+    assert (df["close"] > 0).all()
+    peak = float(df["close"].loc["2011-08-01":"2011-10-01"].max())
+    assert 1500 < peak < 2300, f"autumn-2011 peak {peak} is not a plausible gold price"
+    # The series must span the secular bear markets a GLD backtest cannot see.
+    assert df.index.min() < pd.Timestamp("1970-01-01")
+    assert float(df["close"].loc["1980-01-21":"1980-02-28"].max()) > 400  # 1980 spike
+
+
+def test_local_parquet_loader_normalises(tmp_path):
+    from vongold.data import load_local_parquet
+
+    idx = pd.date_range("2020-01-01", periods=10, tz="America/New_York")
+    src = pd.DataFrame({"Open": 1.0, "High": 2.0, "Low": 0.5, "Close": 1.5,
+                        "Adj Close": 1.5, "Volume": 100.0}, index=idx)
+    p = tmp_path / "x.parquet"
+    src.to_parquet(p)
+    df = load_local_parquet(p)
+    assert list(df.columns) == ["open", "high", "low", "close", "volume"]
+    assert df.index.tz is None, "a tz-aware index would break alignment with FRED data"
+    assert str(df.index.dtype) == "datetime64[ms]"
+
+
+def test_yahoo_short_series_is_rejected():
+    """A 200 response with too few rows must raise, not silently pass.
+
+    Observed in the wild: range=max returned 263 rows instead of ~5,500 with no error.
+    A silent short series would corrupt a backtest invisibly.
+    """
+    import pytest
+
+    from vongold.data import fetch_yahoo_daily
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            ts = [1600000000 + i * 86400 for i in range(50)]
+            return {"chart": {"result": [{
+                "meta": {"exchangeTimezoneName": "UTC"},
+                "timestamp": ts,
+                "indicators": {"quote": [{"open": [1.0] * 50, "high": [1.0] * 50,
+                                          "low": [1.0] * 50, "close": [1.0] * 50,
+                                          "volume": [1.0] * 50}]},
+            }], "error": None}}
+
+    class FakeSession:
+        def get(self, *a, **k):
+            return FakeResp()
+
+    with pytest.raises(RuntimeError, match="range downgrade"):
+        fetch_yahoo_daily("GLD", rng="max", session=FakeSession(), retries=0, min_rows=4000)
+
+
+# ------------------------------------------------- whipsaw brake (min_hold_days)
+
+def test_min_hold_days_blocks_rapid_reflips():
+    """The brake must actually delay changes, and must be symmetric (entries AND exits).
+
+    Delaying an exit delays protection, so the symmetry is a real trade-off rather than
+    a free win -- this test pins the behaviour so a future change cannot quietly make it
+    one-directional.
+    """
+    from vongold.strategy import apply_rebalance_band
+
+    idx = pd.date_range("2020-01-01", periods=12)
+    # Flip every single day: 1,1,0,0,1,1,0,0,...
+    target = pd.Series([1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0], index=idx)
+    flat = apply_rebalance_band(target, 0.05, min_hold_days=0)
+    braked = apply_rebalance_band(target, 0.05, min_hold_days=5)
+
+    assert flat.tolist() == target.tolist(), "with no brake it should track the target"
+    changes_flat = int((flat.diff().abs() > 0).sum())
+    changes_braked = int((braked.diff().abs() > 0).sum())
+    assert changes_braked < changes_flat, "the brake must reduce the number of changes"
+
+
+def test_min_hold_days_zero_is_a_noop():
+    from vongold.strategy import apply_rebalance_band
+
+    idx = pd.date_range("2020-01-01", periods=40)
+    t = pd.Series(np.random.default_rng(3).choice([0.0, 1.0], size=40), index=idx)
+    a = apply_rebalance_band(t, 0.1, min_hold_days=0)
+    b = apply_rebalance_band(t, 0.1)
+    pd.testing.assert_series_equal(a, b)
+
+
+def test_shipped_defaults_reflect_measured_findings():
+    """Defaults encode conclusions that cost real experiments to reach.
+
+    If someone flips these back without re-running the A/Bs, the tests should say so.
+    - macro gates: LAGGED test showed they HURT (-0.029 / -0.263 Sharpe)
+    - vol target 10%: the sweep's measured optimum for gold
+    - von overlay: measured, and found not to help
+    """
+    from vongold.config import StrategyParams
+
+    p = StrategyParams()
+    assert p.use_real_yield_filter is False, "real-yield gate measured as harmful on a lagged basis"
+    assert p.use_dollar_filter is False, "dollar gate measured as clearly harmful on a lagged basis"
+    assert p.target_vol_annual == 0.10
+    assert p.min_hold_days == 10, "set for cost, not alpha"
+    assert p.use_von_overlay is False
+
+
+def test_strategy_beats_buyhold_drawdown_on_long_history():
+    """The one large, reliable effect: drawdown control over 58 years.
+
+    Also pins the honest caveat -- the Sharpe advantage over buy & hold is NOT
+    statistically significant (the bootstrap CIs overlap). Only the drawdown claim is
+    robust. This test exists so that claim cannot drift upward unnoticed.
+    """
+    import pytest
+
+    from vongold.backtest import buy_and_hold, run_backtest
+    from vongold.config import CostModel, StrategyParams
+    from vongold.data import load_lbma_gold
+
+    try:
+        df = load_lbma_gold()
+    except FileNotFoundError:
+        pytest.skip("LBMA series not present")
+    cost = CostModel()
+    p = StrategyParams()
+    m = run_backtest(df, params=p, cost=cost).metrics
+    b = buy_and_hold(df, cost=cost).metrics
+
+    # Reliable, large: drawdown is roughly a quarter of buy & hold's.
+    assert m["max_drawdown"] > b["max_drawdown"] + 0.35, (
+        f"strategy DD {m['max_drawdown']:.1%} should be far better than {b['max_drawdown']:.1%}"
+    )
+    assert m["vol_annual"] < b["vol_annual"], "risk targeting should lower realised vol"
+    assert m["sharpe"] > b["sharpe"], "sharpe edge is positive (documented as not significant)"
+    # The honest limit, asserted so it is not overclaimed later.
+    assert m["sharpe"] - b["sharpe"] < 0.60, "no evidence for an edge this large"
+
+
+def test_brake_never_delays_a_risk_veto(synth):
+    """Regression: the whipsaw brake must not postpone a safety exit.
+
+    A first implementation applied the brake AFTER the overlay multiplier, which meant a
+    veto could be ignored for up to min_hold_days -- the strategy would keep holding
+    through a signal that said get out. Smoothed entries are fine; delayed kill switches
+    are not. This test fails if anyone reorders those two steps again.
+    """
+    import numpy as np
+    import pandas as pd
+
+    from vongold.backtest import run_backtest
+    from vongold.config import StrategyParams
+    from vongold.von_overlay import overlay_exposure
+
+    dates = synth.index
+    n = len(dates)
+    # Veto everything from the midpoint onward, decisively.
+    ans = pd.DataFrame(
+        {
+            "regime": ["range"] * n,
+            "regime_confidence": [0.9] * n,
+            "long_prob": [0.01] * n,
+            "risk_prob": [0.99] * n,
+        },
+        index=dates,
+    )
+    mult = overlay_exposure(ans, dates, mode="veto")
+    # Force a hard kill from the midpoint so the brake has every chance to delay it.
+    mid = n // 2
+    mult.iloc[mid:] = 0.0
+
+    # A long brake: if the brake were applied after the overlay this would visibly fail.
+    p = StrategyParams(min_hold_days=20)
+    res = run_backtest(synth, params=p, overlay_exposure=mult)
+
+    # Exposure on day t is the target decided at t-1. So from mid+1 onward the holding
+    # must be exactly zero, with no grace period.
+    after = res.exposure.iloc[mid + 1:]
+    assert (after.abs() < 1e-12).all(), (
+        f"brake delayed the veto: {int((after.abs() > 1e-12).sum())} days still held "
+        f"exposure after the kill signal"
+    )

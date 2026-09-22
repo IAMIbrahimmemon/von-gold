@@ -136,18 +136,37 @@ def mechanical_exposure(f: pd.DataFrame, p: StrategyParams, allow_short: bool = 
     return raw.clip(0.0, p.max_exposure)
 
 
-def apply_rebalance_band(target: pd.Series, band: float) -> pd.Series:
+def apply_rebalance_band(target: pd.Series, band: float, min_hold_days: int = 0) -> pd.Series:
     """Hysteresis: only move when the target has drifted more than `band`.
 
     Cuts turnover (and therefore cost) without changing the signal's direction.
+
+    `min_hold_days` adds a second, independent brake: once the position changes, it may
+    not change again for that many days. Whipsaw is the dominant failure mode of a trend
+    signal in a range-bound market -- the 1989-1998 decade lost 8% gross through
+    repeated in/out flips rather than through being wrong about direction. Blocking
+    rapid re-flips is the standard remedy (and the reason real trend systems are
+    specified with holding periods, not just entry rules).
+
+    The brake is symmetric: it delays both entries and exits. Delaying an exit delays
+    the protective effect of going flat, so this is a real trade-off, not a free win --
+    measure it, do not assume it.
     """
     out = np.empty(len(target), dtype=float)
     held = 0.0
+    days_since_change = 10 ** 9
     vals = target.to_numpy()
     for i, t in enumerate(vals):
         if not np.isfinite(t):
             t = 0.0
+        if days_since_change < min_hold_days:
+            out[i] = held
+            days_since_change += 1
+            continue
         if abs(t - held) >= band:
             held = t
+            days_since_change = 0
+        else:
+            days_since_change += 1
         out[i] = held
     return pd.Series(out, index=target.index, name="target_exposure")

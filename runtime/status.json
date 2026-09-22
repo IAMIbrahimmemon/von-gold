@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-22T04:03:07+00:00",
+  "generated_at": "2026-09-22T04:16:46+00:00",
   "symbol": "GLD",
   "enabled": true,
   "kill_switch_tripped": false,
@@ -30,9 +30,9 @@
     "vol_21d_ann": 0.2387583757514646,
     "tsmom": 0.0,
     "above_ma200": false,
-    "real_yield_support": false,
+    "real_yield_support": true,
     "dollar_support": true,
-    "real_yield_10y": 2.68
+    "real_yield_10y": null
   },
   "recent_fills": [
     {

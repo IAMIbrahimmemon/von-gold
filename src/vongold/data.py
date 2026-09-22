@@ -21,7 +21,7 @@ import requests
 YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
 
-USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) von-gold/0.1 research"
+USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 von-gold/0.1 research"
 
 # Macro series used as gold regime conditioning inputs.
 FRED_SERIES = {
@@ -36,61 +36,233 @@ DEFAULT_RAW_DIR = Path(__file__).resolve().parents[2] / "data" / "raw"
 DEFAULT_PROCESSED_DIR = Path(__file__).resolve().parents[2] / "data" / "processed"
 
 
+def load_lbma_gold(path: str | Path | None = None) -> pd.DataFrame:
+    """LBMA gold price fix (USD/troy oz), daily, 1968-present.
+
+    58 years of spot gold is the only way to test a long-only strategy against the
+    1980-2000 and 2013-2015 secular bear markets. A GLD-only backtest cannot see them.
+
+    Source file is a JSON list of {"d": "YYYY-MM-DD", "v": [usd, gbp, eur]}. Only the
+    USD leg is used. LBMA quotes once daily, so the OHLC envelope is flat -- anything
+    that needs a true intrabar range (ATR stops) is meaningless on this series.
+
+    Resolution order: explicit path, then the copy committed under data/raw/ (so the
+    long-history test works on a fresh clone), then the research scratch directory.
+    """
+    if path:
+        candidates = [Path(path)]
+    else:
+        candidates = [
+            DEFAULT_RAW_DIR / "lbma_gold_pm.json",
+            Path.home() / ".hermes" / "cache" / "scratch" / "goldresearch" / "lbma_gold_pm.json",
+        ]
+    p = next((c for c in candidates if c.exists()), None)
+    if p is None:
+        raise FileNotFoundError(
+            "LBMA series not found. Looked in: "
+            + ", ".join(str(c) for c in candidates)
+            + ". Fetch it or use build_dataset() for GLD only."
+        )
+    raw = json.loads(p.read_text())
+    rows = []
+    for rec in raw:
+        v = rec.get("v") or []
+        if not v or v[0] is None:
+            continue
+        try:
+            rows.append({"date": pd.Timestamp(rec["d"]), "close": float(v[0])})
+        except (ValueError, TypeError, KeyError):
+            continue
+    df = pd.DataFrame(rows).drop_duplicates("date").set_index("date").sort_index()
+    df.index = df.index.astype("datetime64[ms]")
+    for c in ("open", "high", "low"):
+        df[c] = df["close"]
+    df["volume"] = 0.0
+    df.index.name = "date"
+    df.attrs["symbol"] = "LBMA-GOLD-PM"
+    df.attrs["source"] = "lbma"
+    return df
+
+
+def load_local_parquet(path: str | Path) -> pd.DataFrame:
+    """Load a cached OHLCV parquet (e.g. the yfinance GLD full history).
+
+    Normalises column names and the index so it can go straight into run_backtest.
+    """
+    h = pd.read_parquet(path)
+    h.columns = [str(c).lower().replace(" ", "_") for c in h.columns]
+    cols = [c for c in ("open", "high", "low", "close", "volume") if c in h.columns]
+    df = h[cols].copy()
+    idx = pd.DatetimeIndex(df.index)
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)
+    df.index = idx.normalize().astype("datetime64[ms]")
+    df.index.name = "date"
+    return df.dropna(subset=["close"])
+
+
 def _session() -> requests.Session:
+    """A session with a warmed cookie jar.
+
+    Yahoo's chart API returns HTTP 429 for most requests from an IP with no cookie,
+    and rate-limits bursts even with one. Measured: a bare curl to query1 returned 429
+    on nearly every attempt, while warming the jar from finance.yahoo.com first made it
+    succeed. Requests without a browser-like User-Agent also failed outright.
+    """
     s = requests.Session()
-    s.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json,text/csv,*/*"})
+    s.headers.update({
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json,text/csv,text/html,*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+    })
+    try:
+        s.get("https://finance.yahoo.com/quote/GLD", timeout=15)
+    except Exception:
+        pass  # a failed warm-up is not fatal; the chart call may still work
     return s
 
 
-def fetch_yahoo_daily(symbol: str, rng: str = "10y", session: requests.Session | None = None) -> pd.DataFrame:
+def _throttle(session: requests.Session, seconds: float) -> None:
+    """Sleep between Yahoo calls. The endpoint tolerates roughly 1 req / 5-10s per IP."""
+    import time
+
+    time.sleep(seconds)
+
+
+# Independent cross-check source for GLD daily bars. Verified 200 without a key, but it
+# requires a browser User-Agent and returns numbers as comma/dollar-formatted STRINGS.
+NASDAQ_HISTORICAL = "https://api.nasdaq.com/api/quote/{symbol}/historical"
+
+
+def fetch_nasdaq_daily(symbol: str = "GLD", fromdate: str = "2004-01-01",
+                       session: requests.Session | None = None) -> pd.DataFrame:
+    """Fetch daily OHLCV from Nasdaq's public API.
+
+    Used as a cross-check on Yahoo, not as the primary source: it is daily-only and its
+    values ar  strings. Having two independent sources is how a stale or split-adjusted
+    Yahoo bar gets caught.
+    """
+    s = session or _session()
+    r = s.get(
+        NASDAQ_HISTORICAL.format(symbol=symbol),
+        params={"assetclass": "etf", "fromdate": fromdate, "limit": 9999},
+        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
+        timeout=40,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"nasdaq {symbol}: HTTP {r.status_code}")
+    payload = r.json()
+    rows = (((payload.get("data") or {}).get("tradesTable") or {}).get("rows")) or []
+    if not rows:
+        raise RuntimeError(f"nasdaq {symbol}: no rows")
+    recs = []
+    for row in rows:
+        try:
+            recs.append({
+                "date": pd.to_datetime(row["date"], format="%m/%d/%Y"),
+                "close": float(str(row["close"]).replace("$", "").replace(",", "")),
+                "open": float(str(row["open"]).replace("$", "").replace(",", "")),
+                "high": float(str(row["high"]).replace("$", "").replace(",", "")),
+                "low": float(str(row["low"]).replace("$", "").replace(",", "")),
+                "volume": float(str(row["volume"]).replace(",", "") or 0),
+            })
+        except (KeyError, ValueError, TypeError):
+            continue
+    if not recs:
+        raise RuntimeError(f"nasdaq {symbol}: no parsable rows")
+    df = pd.DataFrame(recs).set_index("date").sort_index()
+    df.index = df.index.astype("datetime64[ms]")
+    df.index.name = "date"
+    df.attrs["symbol"] = symbol
+    df.attrs["source"] = "nasdaq"
+    return df
+
+
+def fetch_yahoo_daily(symbol: str, rng: str = "10y", session: requests.Session | None = None,
+                      retries: int = 3, retry_wait: float = 6.0,
+                      min_rows: int = 0) -> pd.DataFrame:
     """Fetch daily OHLCV from Yahoo's chart endpoint.
 
     Returns a DatetimeIndex-ed frame with columns: open, high, low, close, volume.
     Raises RuntimeError on a non-200 or an empty result set.
+
+    Retries on 429 (rate limit). `min_rows` guards against a subtle silent failure:
+    Yahoo can answer 200 with a SHORT series when it decides to ignore the requested
+    range, so a caller that asked for 20 years of history can receive a few hundred
+    rows without any error. Passing min_rows turns that into a loud failure.
     """
+    import time
+
     s = session or _session()
     url = YAHOO_CHART.format(symbol=symbol)
-    r = s.get(url, params={"range": rng, "interval": "1d"}, timeout=40)
-    if r.status_code != 200:
-        raise RuntimeError(f"yahoo {symbol}: HTTP {r.status_code}")
-    payload = r.json()
-    results = (payload.get("chart") or {}).get("result") or []
-    if not results:
-        err = (payload.get("chart") or {}).get("error")
-        raise RuntimeError(f"yahoo {symbol}: empty result ({err})")
-    res = results[0]
-    ts = res.get("timestamp") or []
-    if not ts:
-        raise RuntimeError(f"yahoo {symbol}: no timestamps")
-    quote = (res.get("indicators") or {}).get("quote") or [{}]
-    q = quote[0]
+    last_err = None
+    for attempt in range(retries + 1):
+        r = s.get(url, params={"range": rng, "interval": "1d"}, timeout=40)
+        if r.status_code == 429:
+            last_err = f"HTTP 429 (rate limited) after {attempt + 1} attempts"
+            if attempt < retries:
+                time.sleep(retry_wait * (attempt + 1))
+                continue
+            raise RuntimeError(f"yahoo {symbol}: {last_err}")
+        if r.status_code != 200:
+            raise RuntimeError(f"yahoo {symbol}: HTTP {r.status_code}")
+        payload = r.json()
+        results = (payload.get("chart") or {}).get("result") or []
+        if not results:
+            err = (payload.get("chart") or {}).get("error")
+            last_err = f"empty result ({err})"
+            if attempt < retries:
+                time.sleep(retry_wait)
+                continue
+            raise RuntimeError(f"yahoo {symbol}: {last_err}")
+        res = results[0]
+        ts = res.get("timestamp") or []
+        if not ts:
+            last_err = "no timestamps"
+            if attempt < retries:
+                time.sleep(retry_wait)
+                continue
+            raise RuntimeError(f"yahoo {symbol}: {last_err}")
 
-    # Yahoo returns UTC epoch seconds. Normalise to the exchange-local DATE so that
-    # daily bars align across instruments without timezone drift.
-    tz_name = (res.get("meta") or {}).get("exchangeTimezoneName") or "UTC"
-    idx = pd.to_datetime(ts, unit="s", utc=True).tz_convert(tz_name).normalize().tz_localize(None)
+        quote = (res.get("indicators") or {}).get("quote") or [{}]
+        q = quote[0]
 
-    df = pd.DataFrame(
-        {
-            "open": q.get("open"),
-            "high": q.get("high"),
-            "low": q.get("low"),
-            "close": q.get("close"),
-            "volume": q.get("volume"),
-        },
-        index=idx,
-    )
-    df = df[~df.index.duplicated(keep="last")].sort_index()
-    # Yahoo emits nulls for holidays/partial rows.
-    df = df.dropna(subset=["close"])
-    for c in ("open", "high", "low"):
-        df[c] = df[c].fillna(df["close"])
-    df["volume"] = df["volume"].fillna(0.0)
-    df.index.name = "date"
-    df.attrs["symbol"] = symbol
-    df.attrs["currency"] = (res.get("meta") or {}).get("currency")
-    df.attrs["exchange"] = (res.get("meta") or {}).get("fullExchangeName")
-    return df
+        # Yahoo returns UTC epoch seconds. Normalise to the exchange-local DATE so that
+        # daily bars align across instruments without timezone drift.
+        tz_name = (res.get("meta") or {}).get("exchangeTimezoneName") or "UTC"
+        idx = pd.to_datetime(ts, unit="s", utc=True).tz_convert(tz_name).normalize().tz_localize(None)
+
+        df = pd.DataFrame(
+            {
+                "open": q.get("open"),
+                "high": q.get("high"),
+                "low": q.get("low"),
+                "close": q.get("close"),
+                "volume": q.get("volume"),
+            },
+            index=idx,
+        )
+        df = df[~df.index.duplicated(keep="last")].sort_index()
+        # Yahoo emits nulls for holidays/partial rows.
+        df = df.dropna(subset=["close"])
+        for c in ("open", "high", "low"):
+            df[c] = df[c].fillna(df["close"])
+        df["volume"] = df["volume"].fillna(0.0)
+        df.index.name = "date"
+        df.attrs["symbol"] = symbol
+        df.attrs["currency"] = (res.get("meta") or {}).get("currency")
+        df.attrs["exchange"] = (res.get("meta") or {}).get("fullExchangeName")
+
+        if min_rows and len(df) < min_rows:
+            last_err = (f"only {len(df)} rows returned for range={rng} "
+                        f"(expected at least {min_rows}) -- likely a silent range downgrade")
+            if attempt < retries:
+                time.sleep(retry_wait * (attempt + 1))
+                continue
+            raise RuntimeError(f"yahoo {symbol}: {last_err}")
+        return df
+
+    raise RuntimeError(f"yahoo {symbol}: {last_err or 'unknown failure'}")
 
 
 def fetch_fred(series: str, session: requests.Session | None = None) -> pd.Series:
@@ -141,7 +313,10 @@ def build_dataset(
         return pd.read_parquet(out_path)
 
     s = _session()
-    px = fetch_yahoo_daily(symbol, rng=rng, session=s)
+    # Ask for max history and demand a real answer: a bare "max" request was observed
+    # returning 263 rows instead of ~5,500 (silent range downgrade / rate limiting).
+    expected_min = 4000 if rng in ("max", "30y") else 0
+    px = fetch_yahoo_daily(symbol, rng=rng, session=s, min_rows=expected_min)
     (raw_dir / f"yahoo_{symbol}_{rng}.json").write_text(
         json.dumps({"fetched_at": datetime.now(timezone.utc).isoformat(), "symbol": symbol})
     )

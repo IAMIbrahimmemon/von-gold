@@ -77,10 +77,21 @@ def run_backtest(
     else:
         target = mechanical_exposure(f, p, allow_short=allow_short)
 
-    if overlay_exposure is not None:
-        target = target * overlay_exposure.reindex(f.index).fillna(1.0)
+    # ORDER MATTERS. The whipsaw brake is applied to the MECHANICAL target only, before
+    # any risk-reducing overlay. Applying it afterwards would let the brake delay a
+    # safety veto -- the strategy would keep holding the asset for up to min_hold_days
+    # after the overlay said to get out. A brake may smooth a signal; it must never
+    # delay a kill switch. (Caught by test_overlay_can_only_reduce_exposure.)
+    target = apply_rebalance_band(
+        target.clip(-p.max_exposure, p.max_exposure),
+        p.rebalance_band,
+        min_hold_days=getattr(p, "min_hold_days", 0),
+    )
 
-    target = apply_rebalance_band(target.clip(-p.max_exposure, p.max_exposure), p.rebalance_band)
+    if overlay_exposure is not None:
+        # Confined to [0,1] by construction, so this can only ever reduce risk, and it
+        # takes effect on the day it is decided.
+        target = target * overlay_exposure.reindex(f.index).fillna(1.0)
 
     # Decision on t -> held over t+1. shift() moves the target forward so that
     # holding[t+1] == decided[t].
