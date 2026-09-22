@@ -1,0 +1,109 @@
+=== tick 2026-09-22T06:21:00Z ===
+{
+  "symbol": "GLD",
+  "enabled": true,
+  "kill_switch_tripped": false,
+  "date": "2026-09-21",
+  "price": 398.3500061035156,
+  "signal_close": 398.3800048828125,
+  "mark": {
+    "price": 398.35,
+    "as_of": "2026-09-21T15:59:00-04:00",
+    "source": "yfinance 1m bar",
+    "is_intraday": false,
+    "market_open": false,
+    "age_minutes": 622.2
+  },
+  "spot": {
+    "spot_xau_usd": 4318.0,
+    "updated_at": "2026-09-22T06:21:05Z",
+    "source": "gold-api.com"
+  },
+  "as_of": "2026-09-22T06:21:13+00:00",
+  "target_exposure": 0.0,
+  "mechanical_target": 0.0,
+  "von_multiplier": 1.0,
+  "position_shares": 0.0,
+  "cash": 10000.0,
+  "equity": 10000.0,
+  "drawdown_from_peak": 0.0,
+  "traded": false,
+  "von": {
+    "regime": "range",
+    "regime_confidence": 0.523,
+    "long_prob": 0.0527,
+    "risk_prob": 0.5351,
+    "conviction": 2.21,
+    "usage": {
+      "input_tokens": 294,
+      "output_tokens": 4
+    },
+    "transport": "subprocess"
+  },
+  "von_error": null,
+  "inputs": {
+    "vol_21d_ann": 0.2387583757514646,
+    "tsmom": 0.0,
+    "above_ma200": false,
+    "real_yield_support": true,
+    "dollar_support": true,
+    "real_yield_10y": null
+  },
+  "recent_fills": [],
+  "equity_curve": [],
+  "pl": {
+    "windows": [
+      {
+        "label": "all_time",
+        "pl_abs": 0.0,
+        "pl_pct": 0.0,
+        "start_equity": 10000.0,
+        "end_equity": 10000.0,
+        "basis": "reconstructed",
+        "note": "against the $10,000 starting stake"
+      },
+      {
+        "label": "past_24h",
+        "pl_abs": 0.0,
+        "pl_pct": 0.0,
+        "start_equity": 10000.0,
+        "end_equity": 10000.0,
+        "basis": "flat_no_exposure",
+        "note": "flat for this whole window -- no position was open, so no gain or loss was possible (this is not the same as the bot being off)"
+      },
+      {
+        "label": "past_6h",
+        "pl_abs": 0.0,
+        "pl_pct": 0.0,
+        "start_equity": 10000.0,
+        "end_equity": 10000.0,
+        "basis": "flat_no_exposure",
+        "note": "flat for this whole window -- no position was open, so no gain or loss was possible (this is not the same as the bot being off)"
+      },
+      {
+        "label": "past_hour",
+        "pl_abs": 0.0,
+        "pl_pct": 0.0,
+        "start_equity": 10000.0,
+        "end_equity": 10000.0,
+        "basis": "flat_no_exposure",
+        "note": "flat for this whole window -- no position was open, so no gain or loss was possible (this is not the same as the bot being off)"
+      }
+    ],
+    "initial_capital": 10000.0,
+    "current_equity": 10000.0,
+    "total_pl_abs": 0.0,
+    "total_pl_pct": 0.0,
+    "shares": 0.0,
+    "ledger_events": 3,
+    "fills": 0,
+    "mark_source": "no position",
+    "intraday_marks": false,
+    "first_fill_ts": null,
+    "last_fill_ts": null,
+    "generated_at": "2026-09-22T06:21:13.699670+00:00"
+  }
+}
+Created autostash: 14943bd
+published: runtime: session 2026-09-22
+=== done 2026-09-22T06:21:18Z ===
