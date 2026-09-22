@@ -1,30 +1,30 @@
 #!/usr/bin/env python
-"""Live re-decide loop: re-evaluate the position every N seconds against the current price.
+"""Live loop: decide on the real price, trade the paper account, publish in real time.
 
-Read this before running it
----------------------------
-Measured facts that shaped this design:
+Three questions this file answers, each of which was a real complaint:
 
-* **A von decision takes ~4.75s** (subprocess transport, the path live use takes). A
-  10-second interval therefore means the model is busy roughly half the time -- on a laptop,
-  that is real fan and battery cost. The default here is 60s and it is configurable.
+**"Why does it always say add_long?"** Because von's five-way argmax carries a baseline
+prior. Measured over 270 days, one label won every single time regardless of the market.
+The *probabilities* do move with state (open_long correlates r=+0.585 with momentum) but the
+ranking does not. So the action label is displayed as a state readout and weighted at 0.0 --
+it is not allowed to decide trades. See docs/ACTIONS.md.
 
-* **von is deterministic.** The same state asked three times returns byte-identical
-  answers. So re-asking an UNCHANGED state every 10 seconds yields nothing new; the loop is
-  only meaningful when the *price* moves, because the price is what changes the state. This
-  loop therefore compares a state fingerprint and skips the model call when nothing that
-  feeds the decision has changed -- the answer would be provably identical.
+**"Why is it still $10,000 with no trades?"** Because the strategy's trend gate is closed:
+GLD sits below its 200-day average, so the mechanical target is 0 and the correct behaviour
+is to sit flat. A trend follower is flat for long stretches; that is the strategy working.
+`--live-signals` makes entries possible the moment the gate opens, and the reason for
+standing flat is recorded every cycle and shown on the dashboard.
 
-* **The signal is daily.** The strategy is built on daily closes and validated that way.
-  Re-deciding intraday is a DIFFERENT strategy with no backtest behind it, so by default
-  this loop may only REDUCE exposure (act as a risk brake) and cannot open or add a
-  position. That is the honest safe direction: the worst case is being flat in a rally, not
-  holding a losing position the validated strategy never took. Set --allow-entry to let it
-  open positions (untested; you would be trading without evidence).
+**"Make it simulate in real time and show it on the page."** Two mechanisms:
+  * `--live-signals` re-derives the target from the LIVE price rather than yesterday's close,
+    so a move across the 200-day average triggers an entry within one cycle, not overnight.
+  * every decision is published to an ntfy topic, which the dashboard subscribes to over
+    Server-Sent Events, so the page updates in about a second. (The route through
+    raw.githubusercontent.com is stuck behind a 5-minute CDN cache: measured
+    `Cache-Control: max-age=300`. GitHub cannot serve a 10-second feed, so this goes around it.)
 
-What it does per cycle:
-    fetch a live mark -> rebuild state with the live price -> fingerprint -> (if changed)
-    ask von for one of the five actions -> apply the delta -> append to a heartbeat ledger
+Execution happens at the live mark through the same cost model the backtest uses, so the P/L
+is a simulation of what those fills would have cost -- not a marked-to-market fiction.
 """
 
 from __future__ import annotations
@@ -32,9 +32,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -43,199 +45,264 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import pandas as pd  # noqa: E402
 
 from vongold.action import decide_action  # noqa: E402
-from vongold.config import StrategyParams  # noqa: E402
+from vongold.config import CostModel, StrategyParams  # noqa: E402
 from vongold.data import build_dataset  # noqa: E402
-from vongold.live import fetch_live_mark, market_is_open, spot_cross_check  # noqa: E402
-from vongold.state_store import PositionStore  # noqa: E402
-from vongold.strategy import build_features, mechanical_exposure  # noqa: E402
+from vongold.dryrun import simulate_fill  # noqa: E402
+from vongold.live import fetch_live_mark  # noqa: E402
+from vongold.state_store import Ledger, PositionStore, utcnow  # noqa: E402
+from vongold.strategy import apply_rebalance_band, build_features, mechanical_exposure  # noqa: E402
 from vongold.von_state import build_von_problem  # noqa: E402
 
-RUNTIME = Path(__file__).resolve().parents[1] / "runtime"
 REPO = Path(__file__).resolve().parents[1]
+RUNTIME = REPO / "runtime"
 
-# The rolling decision feed the dashboard renders. Kept in memory and rewritten whole each
-# cycle so the published file is always a consistent snapshot (a half-appended JSONL would
-# render as a torn feed).
-FEED: list[dict] = []
+# The real-time transport. ntfy is used because it is free, needs no account, sends
+# `Access-Control-Allow-Origin: *`, and serves ndjson over a plain GET -- so a static page can
+# subscribe with EventSource and receive decisions in about a second.
+DEFAULT_TOPIC = os.environ.get("VONGOLD_NTFY_TOPIC", "")
+NTFY = "https://ntfy.sh"
 
 
-def write_feed(path: Path, feed: list[dict], symbol: str, store, mech_target: float,
-               mark) -> None:
-    """Write the live decision feed the dashboard reads.
+def publish(topic: str, payload: dict, timeout: float = 6.0) -> bool:
+    """Publish one decision to the realtime topic. Never raises into the trading path."""
+    if not topic:
+        return False
+    try:
+        req = urllib.request.Request(
+            f"{NTFY}/{topic}",
+            data=json.dumps(payload, default=str).encode(),
+            headers={"Content-Type": "application/json", "X-Title": "von-gold"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status == 200
+    except Exception:
+        return False
 
-    Deliberately a separate file from status.json: status.json is the once-per-session record
-    of what the STRATEGY decided, while this is the per-10s record of what the MODEL is
-    saying right now. Mixing them would make the session record churn every few seconds.
+
+class LedgerState:
+    """Everything the loop persists, in one place."""
+
+    def __init__(self, runtime: Path, initial_capital: float = 10_000.0, feed_size: int = 80):
+        self.runtime = runtime
+        self.store = PositionStore(runtime / "position.json", initial_capital=initial_capital)
+        self.ledger = Ledger(runtime / "ledger.jsonl")
+        self.feed_path = runtime / "feed.json"
+        self.feed: list[dict] = []
+        self.feed_size = feed_size
+        # Load the existing feed so a restart does not blank the dashboard.
+        try:
+            old = json.loads(self.feed_path.read_text())
+            self.feed = list(reversed(old.get("decisions", [])))[-feed_size:]
+        except Exception:
+            self.feed = []
+
+    def push(self, row: dict) -> None:
+        self.feed.append(row)
+        del self.feed[:-self.feed_size]
+
+    def write_feed(self, symbol: str, mark, target: float, signal: str,
+                   mechanical: float, mode: str, fills_count: int) -> None:
+        pos = self.store.state
+        equity = pos.cash + pos.shares * mark.price
+        payload = {
+            "symbol": symbol,
+            "generated_at": utcnow(),
+            "mode": mode,
+            "price": round(mark.price, 4),
+            "mark": mark.as_dict(),
+            "target_exposure": round(target, 4),
+            "mechanical_target": round(mechanical, 4),
+            "signal": signal,
+            "equity": round(equity, 2),
+            "cash": round(pos.cash, 2),
+            "shares": round(pos.shares, 6),
+            "avg_cost": round(pos.avg_cost, 4),
+            "initial_capital": self.store.initial_capital,
+            "unrealized": round((mark.price - pos.avg_cost) * pos.shares, 2) if pos.shares else 0.0,
+            "fills": fills_count,
+            "flat_reason": signal,
+            "decisions": self.feed[::-1],  # newest first, like a trade tape
+        }
+        tmp = self.feed_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(payload, indent=1, default=str))
+        tmp.replace(self.feed_path)  # atomic: the dashboard never reads a half-written file
+
+
+def live_features(df_base: pd.DataFrame, params: StrategyParams, price: float) -> pd.DataFrame:
+    """Features recomputed with the live price as the latest close.
+
+    Only the CLOSE of the final bar is replaced. The rest of the history is genuinely
+    completed daily data; rewriting it would fabricate bars. This is the difference between
+    "the strategy sees today's price" and "the strategy sees invented history".
     """
-    pos = store.state
-    payload = {
-        "symbol": symbol,
-        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "interval_source": "live_loop",
-        "price": round(mark.price, 4),
-        "mark": mark.as_dict(),
-        "mechanical_target": round(mech_target, 4),
-        "equity": round(pos.equity, 2),
-        "cash": round(pos.cash, 2),
-        "shares": pos.shares,
-        "decisions": feed[::-1],  # newest first, like a trade tape
-    }
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(payload, indent=1))
-    tmp.replace(path)  # atomic: the dashboard never reads a partially written file
-
-
-def utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def state_with_live_price(df: pd.DataFrame, price: float) -> pd.DataFrame:
-    """Overlay the live price onto the last daily bar.
-
-    Only the CLOSE is replaced. The rest of the bar is daily history that has genuinely
-    completed; rewriting it would fabricate data. The last bar's close becomes the live
-    mark, which is the one value that is actually current.
-    """
-    out = df.copy()
-    out.iloc[-1, out.columns.get_loc("close")] = float(price)
-    return out
-
-
-def fingerprint(state: str) -> str:
-    return hashlib.sha256(state.encode()).hexdigest()[:16]
+    d = df_base.copy()
+    d.iloc[-1, d.columns.get_loc("close")] = float(price)
+    return build_features(d, params)
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="live re-decide loop (paper)")
-    ap.add_argument("--interval", type=float, default=10.0,
-                    help="seconds between decisions (von takes ~4.75s, so ~50%% duty cycle)")
-    ap.add_argument("--allow-entry", action="store_true",
-                    help="let the loop OPEN positions (untested intraday -- off by default)")
+    ap = argparse.ArgumentParser(description="live paper-trading loop")
+    ap.add_argument("--interval", type=float, default=10.0)
     ap.add_argument("--cycles", type=int, default=0, help="0 = run forever")
-    ap.add_argument("--cache-unchanged", action="store_true",
-                    help="skip the model call when the state fingerprint is unchanged. von is "
-                         "deterministic, so the answer would be identical -- this saves ~50%% CPU "
-                         "and produces the same feed (rows are marked cached)")
-    ap.add_argument("--publish-every", type=int, default=0,
-                    help="publish the feed to GitHub every N decisions (0 = never)")
-    ap.add_argument("--feed-size", type=int, default=60, help="decisions kept in the feed file")
     ap.add_argument("--symbol", default="GLD")
     ap.add_argument("--runtime", type=Path, default=RUNTIME)
-    ap.add_argument("--journal", type=Path, default=None)
+    ap.add_argument("--topic", default=DEFAULT_TOPIC,
+                    help="ntfy topic for the realtime feed (empty = publishing disabled)")
+    ap.add_argument("--publish-every", type=int, default=0,
+                    help="also git-publish runtime/ every N decisions (0 = never)")
+    ap.add_argument("--feed-size", type=int, default=80)
+    ap.add_argument("--cache-unchanged", action="store_true",
+                    help="skip the model call when the state is unchanged (von is deterministic)")
+    ap.add_argument("--no-von", action="store_true", help="mechanical only; skip the model")
+    # --- trading policy ---
+    ap.add_argument("--live-signals", action="store_true",
+                    help="derive the target from the LIVE price, so a move across the trend gate "
+                         "can enter or exit within a cycle instead of overnight")
+    ap.add_argument("--allow-entry", action="store_true",
+                    help="permit opening/increasing a position at all")
+    ap.add_argument("--no-brake", action="store_true",
+                    help="disable the whipsaw brake (it damps signal churn; keep it on)")
+    ap.add_argument("--initial-capital", type=float, default=10_000.0)
     args = ap.parse_args()
 
-    journal = args.journal or (args.runtime / "live_loop.jsonl")
-    feed_path = args.runtime / "feed.json"
-    store = PositionStore(args.runtime / "position.json")
+    st = LedgerState(args.runtime, args.initial_capital, args.feed_size)
+    params = StrategyParams()
+    cost = CostModel()
 
     df_base = build_dataset(args.symbol, rng="10y").tail(800)
-    params = StrategyParams()
-    f_base = build_features(df_base, params)
-    mech_target = float(mechanical_exposure(f_base, params).iloc[-1])
+    mech_daily = float(mechanical_exposure(build_features(df_base, params), params).iloc[-1])
+    ma200 = float(df_base["close"].tail(200).mean())
 
-    print(f"live loop: {args.symbol} | interval {args.interval}s | "
-          f"mechanical target {mech_target:.3f} | allow_entry={args.allow_entry}")
-    print(f"journal: {journal}")
+    print("von-gold live loop")
+    print(f"  symbol {args.symbol} | interval {args.interval}s | live_signals={args.live_signals} "
+          f"| allow_entry={args.allow_entry}")
+    print(f"  last close {df_base['close'].iloc[-1]:.2f} vs 200d MA {ma200:.2f} "
+          f"-> daily-close target {mech_daily:.3f}")
+    print(f"  realtime topic: {args.topic or '(disabled)'}")
+    pos0 = st.store.state
+    print(f"  account: cash ${pos0.cash:,.2f} shares {pos0.shares} equity ${pos0.equity:,.2f}")
 
     last_fp = None
-    last_action = None
+    last_act = None
     cycles = 0
-    skipped = 0
+    cached_n = 0
+    fills_n = sum(1 for r in st.ledger.all() if r.get("kind") == "fill")
 
     while True:
         cycles += 1
         t0 = time.time()
+
         mark = fetch_live_mark(args.symbol)
         if mark is None:
-            print(f"[{utcnow()}] no live mark available; skipping cycle")
+            print(f"[{utcnow()}] no live mark; skipping cycle")
             time.sleep(args.interval)
             continue
 
-        df = state_with_live_price(df_base, mark.price)
-        prob = build_von_problem(df, len(df) - 1)
-        if prob is None:
-            print(f"[{utcnow()}] could not build a decision problem")
-            time.sleep(args.interval)
-            continue
+        # --- target ---------------------------------------------------------------
+        if args.live_signals:
+            f = live_features(df_base, params, mark.price)
+            raw = mechanical_exposure(f, params)
+            if not args.no_brake:
+                # band=0 keeps hysteresis off (this is a fresh target each cycle) but still
+                # applies the min-hold brake, which cuts churn at no cost in edge.
+                raw = apply_rebalance_band(raw, band=0.0, min_hold_days=params.min_hold_days)
+            mech = float(raw.iloc[-1])
+            gate = "above" if mech > 0 else "below"
+            signal = f"live price {mark.price:.2f} is {gate} its trend gate"
+        else:
+            mech = mech_daily
+            signal = f"daily close {df_base['close'].iloc[-1]:.2f} vs 200d MA {ma200:.2f}"
 
-        fp = fingerprint(prob["state"])
-        changed = fp != last_fp
+        target = mech
+        if not args.allow_entry:
+            # Reduce-only: never open or add. The current exposure is the ceiling, so the loop
+            # can still scale down or flatten. This is the safe default because intraday entry
+            # is a strategy with no backtest behind it.
+            pos = st.store.state
+            held = (pos.shares * mark.price / pos.equity) if pos.equity > 0 else 0.0
+            target = min(target, held)
+            if mech > held + 1e-9:
+                signal += " (entry disabled: holding flat)"
 
-        if args.cache_unchanged and not changed and last_action is not None:
-            # Provably the same problem -> the same answer. Do not spend 5s of CPU on it.
-            skipped += 1
-            row = {"ts": utcnow(), "price": mark.price, "fingerprint": fp,
-                   "action": last_action.action, "conviction": last_action.conviction,
-                   "changed": False, "model_called": False,
-                   "market_open": mark.market_open, "age_minutes": mark.age_minutes}
-            with journal.open("a") as fh:
-                fh.write(json.dumps(row) + "\n")
-            print(f"[{utcnow()}] ${mark.price:.2f} state unchanged (fp={fp}) "
-                  f"-> {last_action.action} (cached, no model call)")
-            time.sleep(args.interval)
-            if args.cycles and cycles >= args.cycles:
-                break
-            continue
+        # --- von (advisory; cannot move money at weight 0) ------------------------
+        act = None
+        cached = False
+        if not args.no_von:
+            df = live_features(df_base, params, mark.price)
+            prob = build_von_problem(df, len(df) - 1)
+            if prob is not None:
+                fp = hashlib.sha256(prob["state"].encode()).hexdigest()[:16]
+                if args.cache_unchanged and fp == last_fp and last_act is not None:
+                    act, cached = last_act, True
+                    cached_n += 1
+                else:
+                    act = decide_action(prob["state"])
+                    last_fp, last_act = fp, act
 
-        act = decide_action(prob["state"])
-        last_fp, last_action = fp, act
+        # --- execute --------------------------------------------------------------
+        pos = st.store.state
+        target = max(0.0, min(1.0, target))
+        equity_before = pos.cash + pos.shares * mark.price
+        fill = {"traded": False, "delta_shares": 0.0, "cost": 0.0}
+        if equity_before > 0:
+            fill = simulate_fill(pos, target, mark.price, cost)
+            if fill.get("traded"):
+                st.store.snapshot(mark.price)
+                st.ledger.append("fill", symbol=args.symbol, price=mark.price,
+                                 target_exposure=target, **fill)
+                fills_n += 1
 
-        pos = store.state
-        exposure_now = (pos.shares * mark.price / pos.equity) if pos.equity > 0 else 0.0
-
-        # --- apply, in the safe direction only unless --allow-entry ---
-        applied = None
-        if act.ok:
-            if act.action == "close":
-                applied = "close"
-            elif act.action == "reduce":
-                applied = "reduce"
-            elif act.action in ("open_long", "add_long") and args.allow_entry:
-                applied = act.action
-            elif act.action in ("open_long", "add_long"):
-                applied = "ignored (entry disabled)"
-            else:
-                applied = "hold (no change)"
+        equity = pos.cash + pos.shares * mark.price
+        pnl = equity - st.store.initial_capital
 
         row = {
-            "ts": utcnow(), "price": mark.price, "fingerprint": fp,
-            "action": act.action, "conviction": act.conviction,
-            "error": act.error, "usage": act.usage,
-            "changed": True, "model_called": True,
-            "market_open": mark.market_open, "age_minutes": mark.age_minutes,
-            "exposure_now": exposure_now, "applied": applied,
-            "spot": None,
+            "ts": utcnow(),
+            "price": round(mark.price, 4),
+            "action": (act.action if act else None),
+            "confidence": (act.confidence if act else None),
+            "probabilities": (act.probabilities if act else None),
+            "conviction": (act.conviction if act else None),
+            "latency_ms": int((time.time() - t0) * 1000),
+            "cached": cached,
+            "target_exposure": round(target, 4),
+            "mechanical_target": round(mech, 4),
+            "traded": bool(fill.get("traded")),
+            "delta_shares": round(fill.get("delta_shares", 0.0) or 0.0, 6),
+            "cost": round(fill.get("cost", 0.0) or 0.0, 4),
+            "shares": round(pos.shares, 6),
+            "cash": round(pos.cash, 2),
+            "equity": round(equity, 2),
+            "pnl": round(pnl, 2),
+            "pnl_pct": round(pnl / st.store.initial_capital * 100, 4),
+            "market_open": mark.market_open,
+            "age_minutes": round(mark.age_minutes, 1),
+            "signal": signal,
         }
-        if cycles % 10 == 1:
-            row["spot"] = spot_cross_check()
+        st.push(row)
+        st.write_feed(args.symbol, mark, target, signal, mech,
+                      mode=("live-signals" if args.live_signals else "daily-signals"),
+                      fills_count=fills_n)
 
-        with journal.open("a") as fh:
-            fh.write(json.dumps(row) + "\n")
-
-        FEED.append({"ts": row["ts"], "price": mark.price, "action": act.action,
-                     "confidence": act.confidence, "probabilities": act.probabilities,
-                     "conviction": act.conviction, "latency_ms": int((time.time()-t0)*1000),
-                     "state_changed": True, "cached": False, "applied": applied,
-                     "market_open": mark.market_open,
-                     "age_minutes": round(mark.age_minutes, 1)})
-        del FEED[:-args.feed_size]
-        write_feed(feed_path, FEED, args.symbol, store, mech_target, mark)
+        if args.topic:
+            publish(args.topic, row)
 
         if args.publish_every and cycles % args.publish_every == 0:
             subprocess.run(["bash", str(REPO / "scripts" / "publish_status.sh"),
-                            "runtime: live decisions"], cwd=str(REPO),
+                            "runtime: live feed"], cwd=str(REPO),
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         el = time.time() - t0
-        print(f"[{utcnow()}] ${mark.price:.2f} fp={fp} -> "
-              f"{act.action} (conv {act.conviction}) {applied} "
-              f"[{el:.1f}s, cycles={cycles} skipped={skipped}]")
+        tag = f"TRADE {row['delta_shares']:+.4f}sh" if row["traded"] else "no trade"
+        print(f"[{row['ts'][11:19]}] ${mark.price:7.2f} tgt={target:.2f} {tag:20} "
+              f"eq=${equity:9.2f} pnl=${pnl:+8.2f} | {(act.action if act else '-'):10} "
+              f"| {el:.1f}s{' cached' if cached else ''}")
 
         if args.cycles and cycles >= args.cycles:
             break
         time.sleep(max(0.0, args.interval - el))
 
-    print(f"stopped after {cycles} cycles ({skipped} skipped as unchanged)")
+    print(f"stopped after {cycles} cycles ({cached_n} cached)")
     return 0
 
 

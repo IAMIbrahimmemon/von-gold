@@ -268,6 +268,14 @@ def run_once(
         "date": decision["date"],
         "price": price,
         "signal_close": signal_price,
+        # Why exposure is what it is. Without this a flat bot looks broken on the dashboard;
+        # with it the reason ("price is below its 200d average") is visible.
+        "flat_reason": (
+            f"price {price:.2f} is "
+            + ("above" if decision["inputs"]["above_ma200"] else "below")
+            + " its 200d trend gate"
+            + ("" if target > 0 else " -- flat is the strategy's decision, not an error")
+        ),
         "mark": (mark.as_dict() if mark else None),
         "spot": spot_cross_check(),
         "as_of": utcnow(),

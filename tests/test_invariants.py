@@ -923,9 +923,14 @@ def test_live_loop_never_opens_a_position_without_allow_entry():
     """
     from pathlib import Path as _P
     src = (_P(__file__).resolve().parents[1] / "scripts" / "live_loop.py").read_text()
-    # the gate must consult allow_entry before accepting an entry action
-    assert '"open_long", "add_long") and args.allow_entry' in src
-    assert "ignored (entry disabled)" in src
+    # The safety property: without --allow-entry the target is capped at what is already held,
+    # so the loop can reduce but can never open or add.
+    assert "if not args.allow_entry:" in src, "the entry gate must exist"
+    assert "target = min(target, held)" in src, (
+        "without --allow-entry the target must be capped at current exposure so no entry is "
+        "possible"
+    )
+    assert "--live-signals" in src and "live_features" in src
 
 
 def test_probe_asks_exactly_the_question_production_asks():
@@ -954,3 +959,82 @@ def test_probe_asks_exactly_the_question_production_asks():
     spec.loader.exec_module(mod)
     assert mod.build_questions(True) == QUESTION
     assert mod.build_questions(False) == QUESTION
+
+
+def test_account_actually_trades_when_the_trend_gate_opens():
+    """Prove the paper account executes, and explain why it sits at $10,000 when it does not.
+
+    The complaint "it is still at 10k and never trades" has a specific cause: the strategy's
+    trend gate is CLOSED whenever price is below its 200-day average, which makes the correct
+    target zero. A trend follower is flat for long stretches by design. This test pins both
+    halves -- flat when below the gate, and an actual fill when above it -- so the flat
+    behaviour can never be mistaken for a broken execution path.
+    """
+    import tempfile
+    from pathlib import Path as _P2
+    from vongold.config import CostModel, StrategyParams
+    from vongold.data import build_dataset
+    from vongold.dryrun import simulate_fill
+    from vongold.state_store import PositionStore
+    from vongold.strategy import build_features, mechanical_exposure
+
+    df = build_dataset("GLD", rng="10y").tail(800)
+    params = StrategyParams()
+
+    def target_at(fake_price):
+        d = df.copy()
+        d.iloc[-1, d.columns.get_loc("close")] = fake_price
+        f = build_features(d, params)
+        return float(mechanical_exposure(f, params).iloc[-1])
+
+    # Below the 200d MA the gate is shut -> no position. That is correct, not a bug.
+    below = df["close"].tail(200).mean() * 0.9
+    assert target_at(below) == 0.0, "below the trend gate the target must be zero"
+
+    # Above it, the strategy wants exposure.
+    above = df["close"].tail(200).mean() * 1.05
+    t_above = target_at(above)
+    assert t_above > 0.05, f"above the trend gate the target should be meaningful, got {t_above}"
+
+    # And the account must actually fill that target at the live price.
+    tmp = _P2(tempfile.mkdtemp())
+    store = PositionStore(tmp / "position.json")
+    pos = store.state
+    assert abs(pos.cash - 10_000.0) < 1e-6, "a fresh paper account seeds $10,000 of cash"
+    fill = simulate_fill(pos, t_above, above, CostModel())
+    assert fill["traded"] is True, "crossing the gate must produce a fill"
+    assert pos.shares > 0, "a fill must result in shares"
+    assert 0.0 < pos.cash < 10_000.0, "buying spends cash"
+    equity = pos.cash + pos.shares * above
+    assert equity < 10_000.0, "the round trip must cost something (fees), never create money"
+    # and flattening returns to roughly break-even minus costs
+    simulate_fill(pos, 0.0, above, CostModel())
+    assert pos.shares == 0.0
+    assert 9_990.0 < pos.cash < 10_000.0, f"flat again near the start, got {pos.cash}"
+
+
+def test_realtime_topic_is_set_and_the_page_reads_it():
+    """The dashboard needs the ntfy topic to subscribe; it must come from one source of truth.
+
+    The topic is written by the loop into runtime/realtime.json. If the page hardcoded a
+    different name, the feed would silently never update -- a failure that looks like "the bot
+    stopped" rather than a config mismatch.
+    """
+    import json as _json
+    from pathlib import Path as _P
+    repo = _P(__file__).resolve().parents[1]
+    topic_file = repo / "runtime" / "realtime.json"
+    if not topic_file.exists():
+        return  # not configured yet; the loop creates it
+    cfg = _json.loads(topic_file.read_text())
+    assert cfg.get("topic"), "realtime.json must carry a topic"
+    assert len(cfg["topic"]) >= 20, "the topic acts as a shared secret; keep it long"
+    page = (repo / "web" / "index.html").read_text()
+    # The page gets the topic through the proxy endpoint rather than fetching raw.githubusercontent
+    # directly, so there is one place the topic is fetched and one place it can be cached.
+    assert "what=topic" in page, "the page must obtain the topic from the topic endpoint"
+    assert "EventSource" in page, "the page must subscribe with EventSource"
+    # and the endpoint must actually serve it from the single source of truth
+    api = (repo / "web" / "api" / "quote.js").read_text()
+    assert "realtime.json" in api, "the endpoint must read runtime/realtime.json"
+    assert "ntfy" in page, "the page must point at the realtime transport"

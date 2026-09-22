@@ -86,6 +86,7 @@
   <div class="sub">Gold (GLD) • paper trading only • decision model: local von 1.0 MLX (395M, no LLM tokens)</div>
 
   <div id="alert"></div>
+  <div id="whyBox"></div>
 
   <div class="panel" style="margin-bottom:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
@@ -125,7 +126,7 @@
   <div class="feed">
     <!-- CALL: the current decision, with a confidence bar per option -->
     <div class="panel call">
-      <h2>Call</h2>
+      <h2>Call <span class="muted" style="font-weight:400;font-size:11px" id="rtStatus">connecting…</span></h2>
       <div id="callAction" class="actionline">—</div>
       <div class="sub2" id="callMeta"></div>
       <div id="callBars" class="bars"></div>
@@ -386,6 +387,35 @@ function barRows(probs, winner){
   }).join("");
 }
 
+function renderWhy(f){
+  const box = document.getElementById("whyBox");
+  if(!box) return;
+  if(!f){ box.innerHTML = ""; return; }
+  const pnl = Number(f.equity||0) - Number(f.initial_capital||10000);
+  const pos = Number(f.shares||0) > 0;
+  const col = pnl > 0 ? "#3fb950" : (pnl < 0 ? "#f85149" : "var(--muted)");
+  box.innerHTML = `<div class="panel" style="margin-bottom:12px">
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:baseline">
+      <div><span class="muted" style="font-size:11px">PAPER ACCOUNT</span>
+        <div style="font-family:var(--mono);font-size:22px;font-weight:700">$${Number(f.equity||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        <div style="font-size:11px;color:${col}">${pnl>=0?"+":"-"}$${Math.abs(pnl).toFixed(2)} (${((pnl/Number(f.initial_capital||10000))*100).toFixed(3)}%) since $${Number(f.initial_capital||10000).toLocaleString()}</div>
+      </div>
+      <div><span class="muted" style="font-size:11px">POSITION</span>
+        <div style="font-family:var(--mono);font-size:22px;font-weight:700">${pos? Number(f.shares).toFixed(3)+" sh" : "FLAT"}</div>
+        <div style="font-size:11px" class="muted">${pos? `avg $${Number(f.avg_cost).toFixed(2)} · unrealized $${Number(f.unrealized||0).toFixed(2)}` : "no gold held"}</div>
+      </div>
+      <div><span class="muted" style="font-size:11px">TARGET EXPOSURE</span>
+        <div style="font-family:var(--mono);font-size:22px;font-weight:700">${((Number(f.target_exposure)||0)*100).toFixed(0)}%</div>
+        <div style="font-size:11px" class="muted">${Number(f.fills)||0} fill(s)</div>
+      </div>
+      <div style="flex:1;min-width:220px"><span class="muted" style="font-size:11px">WHY IT IS ${pos?"HOLDING":"FLAT"}</span>
+        <div style="font-size:12px;margin-top:2px">${esc(f.signal||"—")}</div>
+        <div style="font-size:10px" class="muted">mode: ${esc(f.mode||"—")}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderCall(d, fresh){
   if(!d){ 
     document.getElementById("callAction").textContent = "—";
@@ -424,6 +454,74 @@ function renderTape(list){
 }
 
 let FEED = null;
+let LIVE_ROWS = [];        // decisions received over SSE, newest first
+let SS = null;
+
+// ---------------------------------------------------------------------------
+// Real-time subscription.
+//
+// The feed published through raw.githubusercontent.com is stuck behind a 5-minute CDN cache
+// (measured: Cache-Control max-age=300), so a 10-second decision stream cannot ride on it.
+// GitHub Pages / raw is the wrong transport for this; ntfy speaks ndjson with CORS * and the
+// page subscribes with EventSource, so rows land in about a second.
+//
+// SECURITY: the topic name is a shared secret -- anyone who knows it can read or inject
+// messages. So ntfy drives DISPLAY ONLY. Money-carrying fields (equity, cash, shares, fills)
+// always come from the GitHub-published feed, which only the Mac can write. A forged ntfy row
+// can make the tape say anything; it cannot move the account.
+// ---------------------------------------------------------------------------
+async function startRealtime(){
+  let topic = null;
+  try{
+    const r = await fetch(`/api/quote?what=topic&t=${Date.now()}`, {cache:"no-store"});
+    if(r.ok){ const j = await r.json(); topic = j.topic; }
+  }catch(e){}
+  if(!topic){ setRtStatus("no topic configured"); return; }
+
+  try{
+    if(SS) SS.close();
+    SS = new EventSource(`https://ntfy.sh/${topic}/sse`);
+    SS.onopen = ()=> setRtStatus("live");
+    SS.onerror = ()=> setRtStatus("reconnecting");
+    SS.onmessage = ev=>{
+      if(!ev.data) return;
+      let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
+      if(m.event !== "message" || !m.message) return;
+      let row; try{ row = JSON.parse(m.message); }catch(e){ return; }
+      if(!row || !row.ts) return;
+      // The topic is necessarily public (any visitor can read it out of this page), so the
+      // stream is UNTRUSTED. These checks keep injected junk out of the tape. They are
+      // display-integrity guards, not security: the account's money fields are never taken
+      // from here -- they come from the GitHub-published feed, which only the Mac can write.
+      if(!isPlausible(row)) return;
+      LIVE_ROWS.unshift(row);
+      LIVE_ROWS = LIVE_ROWS.slice(0, 80);
+      setRtStatus(`live · ${LIVE_ROWS.length}`);
+      renderCall(LIVE_ROWS[0], true);
+      renderTape(LIVE_ROWS);
+    };
+  }catch(e){ setRtStatus("unavailable"); }
+}
+
+function isPlausible(row){
+  // 1. timestamp must parse and be near now (a replay or a forged old row is dropped)
+  const t = Date.parse(row.ts);
+  if(!isFinite(t)) return false;
+  if(Math.abs(Date.now() - t) > 30*60*1000) return false;
+  // 2. the price must be in the same ballpark as the last authoritative price, so nobody can
+  //    post a crash or a moonshot into the tape
+  const ref = (LAST && Number(LAST.price)) || (FEED && Number(FEED.price)) || null;
+  const px = Number(row.price);
+  if(!isFinite(px) || px <= 0) return false;
+  if(ref && Math.abs(px/ref - 1) > 0.25) return false;
+  return true;
+}
+
+function setRtStatus(txt){
+  const el = document.getElementById("rtStatus");
+  if(el) el.textContent = txt;
+}
+
 
 async function loadFeed(){
   try{
@@ -431,11 +529,17 @@ async function loadFeed(){
     if(!r.ok){ renderCall(null); return; }
     const d = await r.json();
     FEED = d;
+    renderWhy(d);
     const freshest = (d.decisions && d.decisions[0]) || null;
     const gen = d.generated_at ? Date.parse(d.generated_at) : 0;
     const fresh = gen && (Date.now()-gen < 40000);
-    renderCall(freshest, fresh);
-    renderTape(d.decisions || []);
+    // Prefer whichever is newer: the SSE row (seconds) or the published feed (minutes).
+    const sse = LIVE_ROWS[0];
+    const pick = (sse && freshest)
+      ? (Date.parse(sse.ts) >= Date.parse(freshest.ts) ? sse : freshest)
+      : (sse || freshest);
+    renderCall(pick, !!(sse && pick === sse));
+    renderTape(LIVE_ROWS.length ? LIVE_ROWS : (d.decisions || []));
   }catch(e){}
 }
 
@@ -521,6 +625,7 @@ loadQuote();
 // promptly, and keep it independent of the (much slower) session status poll.
 setInterval(loadFeed, 5000);
 loadFeed();
+startRealtime();
 
 // Trades / Inputs tabs
 document.querySelectorAll(".tabbtn").forEach(b=>{

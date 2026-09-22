@@ -1,0 +1,7 @@
+{
+  "topic": "vongold-39d76b5aea8443b02df7b01c17ad9a69",
+  "transport": "ntfy.sh",
+  "subscribe_url": "https://ntfy.sh/vongold-39d76b5aea8443b02df7b01c17ad9a69/json",
+  "publish_url": "https://ntfy.sh/vongold-39d76b5aea8443b02df7b01c17ad9a69",
+  "note": "ntfy is used because it needs no account and sends CORS * so a static page can subscribe over SSE. The topic name is effectively a shared secret: anyone who knows it can read or inject messages. Account state (equity, fills) is taken from the GitHub-published feed, which only the Mac can write; ntfy drives display only."
+}
