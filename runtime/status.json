@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-22T06:15:50+00:00",
+  "generated_at": "2026-09-22T06:21:13+00:00",
   "symbol": "GLD",
   "enabled": true,
   "kill_switch_tripped": false,
@@ -12,14 +12,14 @@
     "source": "yfinance 1m bar",
     "is_intraday": false,
     "market_open": false,
-    "age_minutes": 616.8
+    "age_minutes": 622.2
   },
   "spot": {
-    "spot_xau_usd": 4320.299805,
-    "updated_at": "2026-09-22T06:15:35Z",
+    "spot_xau_usd": 4318.0,
+    "updated_at": "2026-09-22T06:21:05Z",
     "source": "gold-api.com"
   },
-  "as_of": "2026-09-22T06:15:50+00:00",
+  "as_of": "2026-09-22T06:21:13+00:00",
   "target_exposure": 0.0,
   "mechanical_target": 0.0,
   "von_multiplier": 1.0,
@@ -28,7 +28,18 @@
   "equity": 10000.0,
   "drawdown_from_peak": 0.0,
   "traded": false,
-  "von": null,
+  "von": {
+    "regime": "range",
+    "regime_confidence": 0.523,
+    "long_prob": 0.0527,
+    "risk_prob": 0.5351,
+    "conviction": 2.21,
+    "usage": {
+      "input_tokens": 294,
+      "output_tokens": 4
+    },
+    "transport": "subprocess"
+  },
   "von_error": null,
   "inputs": {
     "vol_21d_ann": 0.2387583757514646,
@@ -84,12 +95,12 @@
     "total_pl_abs": 0.0,
     "total_pl_pct": 0.0,
     "shares": 0.0,
-    "ledger_events": 2,
+    "ledger_events": 3,
     "fills": 0,
     "mark_source": "no position",
     "intraday_marks": false,
     "first_fill_ts": null,
     "last_fill_ts": null,
-    "generated_at": "2026-09-22T06:15:50.953946+00:00"
+    "generated_at": "2026-09-22T06:21:13.699670+00:00"
   }
 }
