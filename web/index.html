@@ -250,6 +250,7 @@ function drawChart(pts){
 }
 
 async function load(){
+  if(SOURCE === "replay") return;
   let status = null, control = null;
   try {
     const r = await fetch(`${RAW}/status.json?t=${Date.now()}`, {cache:"no-store"});
@@ -424,7 +425,18 @@ function renderWhy(f){
   // the freshest decision row from the realtime stream.
   let signal = f.signal || f.flat_reason || "";
   if(!signal && LIVE_ROWS.length) signal = LIVE_ROWS[0].signal || "";
-  const pnl = Number(f.equity||0) - Number(f.initial_capital||10000);
+  const equity = Number(f.equity||0);
+  // Header tiles must agree with this panel, or the page contradicts itself.
+  const mEq = document.getElementById("mEquity");
+  if(mEq){
+    mEq.textContent = "$" + equity.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    mEq.className = "v " + (equity >= Number(f.initial_capital||10000) ? "good" : "bad");
+  }
+  const mT = document.getElementById("mTarget");
+  if(mT) mT.textContent = ((Number(f.target_exposure)||0)*100).toFixed(0)+"%";
+  const mP = document.getElementById("mPrice");
+  if(mP && f.price) mP.textContent = "$" + Number(f.price).toFixed(2);
+  const pnl = equity - Number(f.initial_capital||10000);
   const pos = Number(f.shares||0) > 0;
   const col = pnl > 0 ? "#3fb950" : (pnl < 0 ? "#f85149" : "var(--muted)");
   box.innerHTML = `<div class="panel" style="margin-bottom:12px">
@@ -620,7 +632,12 @@ async function setSource(which){
   SOURCE = which;
   document.getElementById("srcLive").classList.toggle("active", which==="live");
   document.getElementById("srcReplay").classList.toggle("active", which==="replay");
+  // The realtime stream and the quote poller both write into the same panels. Leaving them on
+  // in replay mode made the header tiles show the live $10,000 while the account panel showed
+  // the replayed $11,291 -- the page contradicting itself.
   if(which==="replay"){
+    try{ if(SS) SS.close(); }catch(e){}
+    SS = null;
     const ok = await loadReplay();
     if(!ok){
       const b = document.getElementById("whyBox");
@@ -629,7 +646,7 @@ async function setSource(which){
         <code>env -u PYTHONPATH .venv/bin/python scripts/replay.py --days 250</code></div>`;
     }
   } else {
-    load(); loadFeed();
+    load(); loadFeed(); startRealtime();
   }
 }
 
@@ -680,6 +697,7 @@ function paintFreshness(q){
 }
 
 function revalue(){
+  if(SOURCE === "replay") return;
   if(!LAST || !QUOTE) return;
   const cash = Number(LAST.cash ?? 0);
   const shares = Number(LAST.position_shares ?? 0);
@@ -718,6 +736,7 @@ function revalue(){
 }
 
 async function loadQuote(){
+  if(SOURCE === "replay") return;
   try{
     const r = await fetch(`/api/quote?symbol=${encodeURIComponent((LAST && LAST.symbol) || "GLD")}&t=${Date.now()}`, {cache:"no-store"});
     if(!r.ok) return;
