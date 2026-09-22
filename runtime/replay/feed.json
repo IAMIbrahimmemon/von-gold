@@ -1,6 +1,6 @@
 {
  "symbol": "GLD",
- "generated_at": "2026-09-22T07:34:18+00:00",
+ "generated_at": "2026-09-22T07:34:53+00:00",
  "mode": "replay",
  "replay": true,
  "replay_note": "Historical replay through the production fill path. Timestamps are compressed; this is not live trading.",
