@@ -167,7 +167,7 @@ env -u PYTHONPATH .venv/bin/python scripts/export_problems.py
 
 # 2. run von over them -- MUST use the von-mlx venv (MLX streams are thread-local;
 #    this runs in the main thread in-process, ~17 min for 2,252 days)
-cd ~/vendor-mlx/von-mlx && env -u PYTHONPATH .venv/bin/python \
+cd "$VON_MLX_DIR" && env -u PYTHONPATH .venv/bin/python \
   ~/Documents/GitHub/von-gold/scripts/von_batch.py \
   --model-dir out/von-1.0-mlx/8bit \
   --problems ~/Documents/GitHub/von-gold/data/processed/von_problems.jsonl \

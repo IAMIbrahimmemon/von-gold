@@ -11,6 +11,7 @@ Verified working 2026-09-21:
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -52,10 +53,10 @@ def load_lbma_gold(path: str | Path | None = None) -> pd.DataFrame:
     if path:
         candidates = [Path(path)]
     else:
-        candidates = [
-            DEFAULT_RAW_DIR / "lbma_gold_pm.json",
-            Path.home() / ".hermes" / "cache" / "scratch" / "goldresearch" / "lbma_gold_pm.json",
-        ]
+        candidates = [DEFAULT_RAW_DIR / "lbma_gold_pm.json"]
+        env_path = os.environ.get("VONGOLD_LBMA_PATH")
+        if env_path:
+            candidates.append(Path(env_path))
     p = next((c for c in candidates if c.exists()), None)
     if p is None:
         raise FileNotFoundError(

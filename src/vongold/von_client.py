@@ -17,13 +17,16 @@ trade signal. A model outage must not be able to move money.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-VON_REPO = Path.home() / "vendor-mlx" / "von-mlx"
+# Where the local von MLX checkout lives. Override with VON_MLX_DIR; the default is a
+# plain convention, not a machine-specific path.
+VON_REPO = Path(os.environ.get("VON_MLX_DIR", Path.home() / "vendor-mlx" / "von-mlx"))
 VON_PYTHON = VON_REPO / ".venv" / "bin" / "python"
 VON_MODEL_DIR = VON_REPO / "out" / "von-1.0-mlx" / "8bit"
 DECIDE_SCRIPT = REPO / "scripts" / "von_decide_one.py"

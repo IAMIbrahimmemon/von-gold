@@ -19,6 +19,7 @@ core trend + volatility-targeting mechanism.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -32,7 +33,8 @@ from vongold.data import load_lbma_gold, load_local_parquet
 pd.set_option("display.width", 220)
 pd.set_option("display.max_columns", 40)
 
-LBMA = Path.home() / ".hermes" / "cache" / "scratch" / "goldresearch" / "lbma_gold_pm.json"
+LBMA = Path(os.environ.get("VONGOLD_LBMA_PATH",
+                  Path(__file__).resolve().parents[1] / "data" / "raw" / "lbma_gold_pm.json"))
 GLD_YF = Path("data/processed/gld_yfinance_max.parquet")
 
 
