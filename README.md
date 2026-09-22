@@ -207,10 +207,12 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.vongold.dryrun.pli
 
 **Verified (actually executed):**
 
-* **34/34** invariant tests pass, including the two no-lookahead checks, the kill-switch
-  ordering regression, and the "defaults encode measured findings" test
+* **37/37** invariant tests pass, including the two no-lookahead checks, the kill-switch
+  ordering regression, the stale-cache guard, the price-source fallback chain, and the
+  "defaults encode measured findings" test
 * Every documented number regenerates from `scripts/*.py` on the shipped defaults — no
   parameter overrides hiding in the scripts that produced the tables
+* Full data rebuild timed end-to-end: **16.8s** (was 210s before the FRED UA fix)
 * Backtests over **14,687 real LBMA bars (58y)** and 5,493 real GLD bars (22y): headline,
   macro-gate A/B, overfitting battery, brake bootstrap, 40-config family sweep — all on
   real data
@@ -221,6 +223,9 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.vongold.dryrun.pli
 * Dashboard rendered in headless Chrome with real status data
 * Independent cross-check of the live decision: GLD last 398.38 vs 200d MA 416.28 →
   below the gate; 21d vol 23.9% → correct flat position, matching the backtest engine
+* Price-source fallback exercised for real: with raw Yahoo 429ing, `fetch_prices` fell
+  through to yfinance and returned 2,512 bars
+* Stale-cache guard exercised for real: cache truncated by 30 days → auto-refetched
 
 **Validated (checked, not executed):**
 

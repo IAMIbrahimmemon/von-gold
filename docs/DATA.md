@@ -29,6 +29,40 @@ history, and cross-check the last close against Nasdaq's independent API.
 
 Requires a `User-Agent` header. Without one Yahoo may refuse.
 
+### Price sources are tried in order, and FRED must NOT see a browser UA
+
+Two failures found in production, both silent, both now fixed and pinned by tests:
+
+**1. Single-source fetch is a single point of failure.** Raw requests to
+`query1.finance.yahoo.com` were observed returning **429 on every attempt** from this IP
+while `yfinance` — which performs its own cookie/crumb handshake — returned the full
+series fine. `fetch_prices()` now tries **yfinance → raw Yahoo → Nasdaq** and reports which
+source it used (recorded in `data/raw/yahoo_GLD_10y.json`). All three must fail before it
+raises, so "no data" can never be mistaken for "flat market".
+
+**2. FRED rejects the browser User-Agent that Yahoo requires.** Measured directly:
+
+```
+fredgraph.csv?id=DFII10  with Chrome UA     -> http=000 (connection failure)
+fredgraph.csv?id=DFII10  with no UA         -> http=200, 98,955 bytes
+```
+
+Reusing one session for both hosts made **every** macro series fail, each burning a 40s
+timeout — ~200s per tick — and silently dropped all five macro columns. `fetch_fred()` now
+sends a plain identifier and uses a 15s timeout. Full rebuild went **210s → 16.8s** with
+all macro series loading.
+
+### ⚠️ A cache with no freshness check makes a daily bot trade stale prices forever
+
+`build_dataset()` originally did: *if the parquet exists, return it*. The cache is written
+once and then served forever, so the dry run would keep trading on the last day it happened
+to fetch — with **no error anywhere**, because every downstream number (vol, MA200,
+momentum) is computed from the same stale frame and looks perfectly self-consistent.
+
+`max_stale_days=4` (long weekend + holiday) now forces a refetch. Verified by truncating
+the cache by 30 days: the next call logged `cache is 31 days stale; refreshing` and
+refetched automatically.
+
 ### Choosing the instrument
 
 `GLD` is the default because it is what a retail account can actually buy and sell, so

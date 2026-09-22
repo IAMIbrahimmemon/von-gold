@@ -594,3 +594,119 @@ def test_brake_never_delays_a_risk_veto(synth):
         f"brake delayed the veto: {int((after.abs() > 1e-12).sum())} days still held "
         f"exposure after the kill signal"
     )
+
+
+# ------------------------------------------------- stale-cache guard (daily bot safety)
+
+def test_stale_cache_triggers_refetch(tmp_path):
+    """A cache that is never invalidated is a silent-failure trap for a daily bot.
+
+    build_dataset used to be "if the parquet exists, return it" -- written once, served
+    forever. The dry run would then keep trading on the last day it happened to fetch,
+    with no error and no stale-looking state, because every downstream number is computed
+    from the same stale frame. This test pins the freshness guard.
+    """
+    from vongold.data import latest_bar_age_days
+
+    fresh = pd.DataFrame({"close": [1.0]}, index=pd.DatetimeIndex(["2026-09-21"]))
+    fresh.index = fresh.index.astype("datetime64[ms]")
+    old = pd.DataFrame({"close": [1.0]}, index=pd.DatetimeIndex(["2020-01-02"]))
+    old.index = old.index.astype("datetime64[ms]")
+
+    today = pd.Timestamp("2026-09-21")
+    assert latest_bar_age_days(fresh, today) == 0
+    assert latest_bar_age_days(old, today) > 1000
+    # An empty frame must look infinitely stale, never fresh.
+    assert latest_bar_age_days(pd.DataFrame(columns=["close"]), today) > 100000
+
+
+def test_price_source_fallback_chain():
+    """fetch_prices must fall through to the next source instead of giving up.
+
+    Raw Yahoo was observed returning 429 on every request from this IP while yfinance
+    returned fine. With a single-source fetch the daily tick would simply fail. This
+    asserts the chain reports the source it used and raises only when ALL fail.
+    """
+    import vongold.data as d
+
+    good = pd.DataFrame({"close": [1.0, 2.0]},
+                        index=pd.DatetimeIndex(["2026-09-18", "2026-09-21"]).astype("datetime64[ms]"))
+    good.index.name = "date"
+    calls = []
+
+    def boom(*a, **k):
+        calls.append("failed")
+        raise RuntimeError("simulated 429")
+
+    def works(*a, **k):
+        calls.append("ok")
+        return good.copy()
+
+    orig = (d.fetch_yfinance_daily, d.fetch_yahoo_daily, d.fetch_nasdaq_daily)
+    try:
+        # First two sources fail -> third must be used.
+        d.fetch_yfinance_daily = boom
+        d.fetch_yahoo_daily = boom
+        d.fetch_nasdaq_daily = works
+        df, src = d.fetch_prices("GLD")
+        assert src == "nasdaq", f"expected fallback to nasdaq, got {src}"
+        assert len(df) == 2
+
+        # All three fail -> must raise, never return an empty frame. Returning empty
+        # would look like "flat market" to the strategy.
+        d.fetch_nasdaq_daily = boom
+        try:
+            d.fetch_prices("GLD")
+            raise AssertionError("fetch_prices returned success with every source down")
+        except RuntimeError as exc:
+            assert "all price sources failed" in str(exc)
+    finally:
+        d.fetch_yfinance_daily, d.fetch_yahoo_daily, d.fetch_nasdaq_daily = orig
+
+
+def test_fred_does_not_reuse_the_browser_session():
+    """FRED rejects the Chrome User-Agent that Yahoo requires.
+
+    Measured: fredgraph.csv with a browser UA returned a connection-level failure while
+    the same request with no UA returned 200. Reusing one session for both hosts made
+    every macro series fail with a 40s timeout each (~200s per tick) and silently dropped
+    all macro columns. This pins the actual behaviour -- that the browser UA constant is
+    not used to build the FRED request -- rather than grepping the source, which would
+    also match the docstring explaining the problem.
+    """
+    import inspect
+
+    import vongold.data as d
+
+    sig = inspect.signature(d.fetch_fred)
+    assert "timeout" in sig.parameters
+    assert sig.parameters["timeout"].default <= 20, "a long timeout makes a bad macro day expensive"
+
+    # Capture the headers actually sent.
+    seen: list[dict] = []
+
+    class FakeResp:
+        status_code = 200
+        # Must exceed fetch_fred's >100-byte sanity gate -- it rejects a short body,
+        # which is how a truncated/error page gets caught. Real FRED CSVs are ~99KB.
+        text = "observation_date,DFII10\n" + "".join(
+            f"2026-0{i%9+1}-0{i%9+1},{2.0 + i * 0.01:.2f}\n" for i in range(1, 25)
+        )
+
+    def fake_get(url, headers=None, timeout=None):
+        seen.append(dict(headers or {}))
+        return FakeResp()
+
+    orig = d.requests.get
+    try:
+        d.requests.get = fake_get
+        d.fetch_fred("DFII10")
+    finally:
+        d.requests.get = orig
+
+    assert seen, "fetch_fred made no request"
+    for hdrs in seen:
+        ua = hdrs.get("User-Agent", "")
+        assert "Mozilla" not in ua and "Chrome" not in ua, (
+            f"fetch_fred sent a browser User-Agent ({ua!r}); FRED rejects those"
+        )

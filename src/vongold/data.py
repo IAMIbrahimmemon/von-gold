@@ -265,16 +265,116 @@ def fetch_yahoo_daily(symbol: str, rng: str = "10y", session: requests.Session |
     raise RuntimeError(f"yahoo {symbol}: {last_err or 'unknown failure'}")
 
 
-def fetch_fred(series: str, session: requests.Session | None = None) -> pd.Series:
+def fetch_yfinance_daily(symbol: str = "GLD", period: str = "10y") -> pd.DataFrame:
+    """Fetch daily OHLCV via the yfinance library.
+
+    Preferred over raw Yahoo: the library performs the cookie/crumb handshake itself, so
+    it keeps working when direct requests to query1/query2 return 429. Measured on this
+    machine while raw curl was returning 429 on every attempt, yfinance returned fine.
+
+    Raises RuntimeError if the library is missing or returns nothing -- callers fall back
+    to the next source rather than silently proceeding with no data.
+    """
+    try:
+        import yfinance as yf
+    except ImportError as exc:
+        raise RuntimeError("yfinance not installed") from exc
+
+    tk = yf.Ticker(symbol)
+    h = tk.history(period=period, interval="1d", auto_adjust=False)
+    if h is None or len(h) == 0:
+        raise RuntimeError(f"yfinance {symbol}: empty result for period={period}")
+    h.columns = [str(c).lower().replace(" ", "_") for c in h.columns]
+    cols = [c for c in ("open", "high", "low", "close", "volume") if c in h.columns]
+    if "close" not in cols:
+        raise RuntimeError(f"yfinance {symbol}: no close column (got {list(h.columns)})")
+    df = h[cols].copy()
+    idx = pd.DatetimeIndex(df.index)
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)
+    df.index = idx.normalize().astype("datetime64[ms]")
+    df.index.name = "date"
+    for c in ("open", "high", "low"):
+        if c in df.columns:
+            df[c] = df[c].fillna(df["close"])
+    if "volume" in df.columns:
+        df["volume"] = df["volume"].fillna(0.0)
+    df = df.dropna(subset=["close"])[~df.index.duplicated(keep="last")].sort_index()
+    df.attrs["symbol"] = symbol
+    df.attrs["source"] = "yfinance"
+    return df
+
+
+def fetch_prices(symbol: str = "GLD", rng: str = "10y",
+                 session: requests.Session | None = None,
+                 min_rows: int = 0) -> tuple[pd.DataFrame, str]:
+    """Fetch daily prices, trying every source until one works.
+
+    Returns (frame, source_name). A single-source fetch is a single point of failure: raw
+    Yahoo was observed 429ing on *every* request from this IP while yfinance worked fine,
+    so the order is yfinance -> raw Yahoo -> Nasdaq.
+
+    Raises the collected errors only if all three fail, so a caller can never mistake
+    "no data" for "flat market".
+    """
+    errors: list[str] = []
+    for name, fn in (
+        ("yfinance", lambda: fetch_yfinance_daily(symbol, period=rng)),
+        ("yahoo", lambda: fetch_yahoo_daily(symbol, rng=rng, session=session, min_rows=min_rows)),
+        ("nasdaq", lambda: fetch_nasdaq_daily(symbol)),
+    ):
+        try:
+            df = fn()
+            if min_rows and len(df) < min_rows and name != "nasdaq":
+                raise RuntimeError(f"only {len(df)} rows (wanted {min_rows})")
+            df.attrs["source"] = name
+            return df, name
+        except Exception as exc:  # try the next source
+            errors.append(f"{name}: {type(exc).__name__}: {exc}")
+    raise RuntimeError(f"all price sources failed for {symbol} -- " + " | ".join(errors))
+
+
+def latest_bar_age_days(df: pd.DataFrame, today: pd.Timestamp | None = None) -> int:
+    """Calendar days between today and the last bar. Used to detect a stale cache."""
+    if df is None or len(df) == 0:
+        return 10 ** 6
+    today = pd.Timestamp.today().normalize() if today is None else pd.Timestamp(today).normalize()
+    return int((today - pd.Timestamp(df.index[-1]).normalize()).days)
+
+
+def fetch_fred(series: str, session: requests.Session | None = None,
+               timeout: float = 15.0) -> pd.Series:
     """Fetch one FRED series as a float Series indexed by date.
 
     FRED publishes '.' for missing observations (holidays) -- coerced to NaN.
+
+    DO NOT reuse the browser-flavoured session used for Yahoo. Measured on this machine:
+    fredgraph.csv with a Chrome User-Agent returns a connection-level failure (curl
+    http=000), while the identical request with no User-Agent returns 200 and the full
+    CSV. FRED evidently filters browser UA strings on this endpoint, so this uses a plain
+    identifier instead. The earlier 40s timeout also meant five failing series cost ~200s
+    per tick; 15s keeps a bad macro day cheap.
     """
-    s = session or _session()
     url = FRED_CSV.format(series=series)
-    r = s.get(url, timeout=40)
-    if r.status_code != 200:
-        raise RuntimeError(f"fred {series}: HTTP {r.status_code}")
+    attempts = (
+        {"User-Agent": "von-gold/0.1 (research; +https://fred.stlouisfed.org)"},
+        {},  # second try with no UA at all
+    )
+    last_err: Exception | None = None
+    r = None
+    for headers in attempts:
+        try:
+            r = requests.get(url, headers=headers, timeout=timeout)
+            if r.status_code == 200 and len(r.text) > 100:
+                break
+            last_err = RuntimeError(f"HTTP {r.status_code}, {len(r.text)} bytes")
+            r = None
+        except Exception as exc:
+            last_err = exc
+            r = None
+    if r is None:
+        raise RuntimeError(f"fred {series}: {last_err}")
+
     from io import StringIO
 
     df = pd.read_csv(StringIO(r.text))
@@ -295,6 +395,7 @@ def build_dataset(
     raw_dir: Path | str = DEFAULT_RAW_DIR,
     processed_dir: Path | str = DEFAULT_PROCESSED_DIR,
     refresh: bool = False,
+    max_stale_days: int = 4,
 ) -> pd.DataFrame:
     """Build the joined price+macro dataset, caching raw JSON/CSV and the result.
 
@@ -302,6 +403,12 @@ def build_dataset(
     series, a `*_ffill` column forward-filled onto the trading calendar (macro series
     publish on their own schedule; forward fill is the only honest alignment for a
     daily decision made before the next release).
+
+    `max_stale_days` guards the cache. A pure "cache exists -> return it" check is a
+    silent-failure trap for a daily bot: the cache is written once and then served
+    forever, so the strategy would keep trading on the last day it happened to fetch,
+    with no error anywhere. Observed in practice. The default of 4 covers a long weekend
+    plus a holiday; anything older triggers a refetch.
     """
     raw_dir = Path(raw_dir)
     processed_dir = Path(processed_dir)
@@ -310,16 +417,27 @@ def build_dataset(
 
     out_path = processed_dir / f"dataset_{symbol}_{rng}.parquet"
     if out_path.exists() and not refresh:
-        return pd.read_parquet(out_path)
+        cached = pd.read_parquet(out_path)
+        age = latest_bar_age_days(cached)
+        if age <= max_stale_days:
+            return cached
+        print(f"  cache is {age} days stale (last bar {cached.index[-1].date()}); refreshing")
 
     s = _session()
     # Ask for max history and demand a real answer: a bare "max" request was observed
     # returning 263 rows instead of ~5,500 (silent range downgrade / rate limiting).
     expected_min = 4000 if rng in ("max", "30y") else 0
-    px = fetch_yahoo_daily(symbol, rng=rng, session=s, min_rows=expected_min)
+    px, source = fetch_prices(symbol, rng=rng, session=s, min_rows=expected_min)
     (raw_dir / f"yahoo_{symbol}_{rng}.json").write_text(
-        json.dumps({"fetched_at": datetime.now(timezone.utc).isoformat(), "symbol": symbol})
+        json.dumps({
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "symbol": symbol,
+            "source": source,
+            "rows": int(len(px)),
+            "last_bar": str(px.index[-1].date()),
+        })
     )
+    print(f"  prices via {source}: {len(px)} rows, last bar {px.index[-1].date()}")
 
     df = px.copy()
     for series, name in FRED_SERIES.items():
@@ -332,6 +450,7 @@ def build_dataset(
         df[f"{name}_available"] = ser.reindex(df.index, method="ffill").notna()
 
     df = df.dropna(subset=["close"])
+    df.attrs["source"] = source
     df.to_parquet(out_path)
     return df
 
