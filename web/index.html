@@ -94,8 +94,15 @@
         <span id="switch" class="pill off">unknown</span>
         <span id="switchReason" class="muted" style="font-size:12px"></span>
       </div>
-      <div class="muted" style="font-size:11px;text-align:right;max-width:280px">
-        read-only monitor &middot; the switch lives on the Mac, not here
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="muted" style="font-size:11px">view</span>
+        <div class="tabs" style="margin:0">
+          <button class="tabbtn active" id="srcLive">Live</button>
+          <button class="tabbtn" id="srcReplay">Replay</button>
+        </div>
+        <span class="muted" style="font-size:11px;max-width:230px">
+          read-only &middot; the on/off switch lives on the Mac, not here
+        </span>
       </div>
     </div>
   </div>
@@ -586,7 +593,48 @@ function setRtStatus(txt){
 }
 
 
+// Replay mode reads runtime/replay/feed.json, a historical run through the SAME fill path.
+// It exists because the live strategy trades ~12-14 times a year and is currently flat waiting
+// for the trend gate, so "watch it trade" is not something the live loop can show today. The
+// replay is labelled everywhere so it can never be mistaken for live results.
+let SOURCE = "live";
+
+async function loadReplay(){
+  try{
+    const r = await fetch(`${RAW}/replay/feed.json?t=${Date.now()}`, {cache:"no-store"});
+    if(!r.ok) return false;
+    const d = await r.json();
+    renderWhy(d);
+    const newest = (d.decisions && d.decisions[0]) || null;
+    renderCall(newest, false);
+    renderTape(d.decisions || []);
+    const rt = document.getElementById("rtStatus");
+    if(rt) rt.textContent = "replay (historical)";
+    const mt = document.getElementById("modeTag");
+    if(mt) mt.textContent = "· REPLAY (historical, not live)";
+    return true;
+  }catch(e){ return false; }
+}
+
+async function setSource(which){
+  SOURCE = which;
+  document.getElementById("srcLive").classList.toggle("active", which==="live");
+  document.getElementById("srcReplay").classList.toggle("active", which==="replay");
+  if(which==="replay"){
+    const ok = await loadReplay();
+    if(!ok){
+      const b = document.getElementById("whyBox");
+      b.innerHTML = `<div class="panel" style="margin-bottom:12px"><b>No replay yet.</b>
+        <span class="muted">Run it on the Mac:</span>
+        <code>env -u PYTHONPATH .venv/bin/python scripts/replay.py --days 250</code></div>`;
+    }
+  } else {
+    load(); loadFeed();
+  }
+}
+
 async function loadFeed(){
+  if(SOURCE === "replay") return;
   try{
     const r = await fetch(`${RAW}/feed.json?t=${Date.now()}`, {cache:"no-store"});
     if(!r.ok){ renderCall(null); return; }
@@ -693,7 +741,10 @@ loadFeed();
 startRealtime();
 
 // Trades / Inputs tabs
-document.querySelectorAll(".tabbtn").forEach(b=>{
+document.getElementById("srcLive").onclick   = ()=>setSource("live");
+document.getElementById("srcReplay").onclick = ()=>setSource("replay");
+
+document.querySelectorAll("#tabs .tabbtn").forEach(b=>{
   b.onclick = ()=>{
     document.querySelectorAll(".tabbtn").forEach(x=>x.classList.remove("active"));
     b.classList.add("active");

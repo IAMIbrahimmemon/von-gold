@@ -1,0 +1,13 @@
+{
+  "shares": 0.0,
+  "avg_cost": 0.0,
+  "cash": 11291.583226601942,
+  "last_price": 408.8900146484375,
+  "equity": 11291.583226601942,
+  "opened_at": null,
+  "realized_pl": 1302.9970032287079,
+  "fees_paid": 23.221994819951316,
+  "trades": 60,
+  "wins": 27,
+  "losses": 6
+}
