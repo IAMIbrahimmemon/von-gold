@@ -110,6 +110,12 @@ QUESTION = {
 class Action:
     action: str | None = None
     conviction: float | None = None
+    # von softmaxes over ALL options and returns the full distribution, so the UI can show
+    # the confidence behind every option rather than just the winner. This is the field that
+    # makes a decision feed readable: the ranking collapses (see docs/ACTIONS.md) but the
+    # probabilities still vary with market state.
+    probabilities: dict | None = None
+    confidence: float | None = None
     usage: dict | None = None
     error: str | None = None
 
@@ -157,7 +163,10 @@ def decide_action(state: str, timeout: float = 120.0) -> Action:
                 action = cand
                 break
     conviction = ans.get("conviction", {}).get("score")
-    return Action(action=action, conviction=conviction, usage=out.get("usage"))
+    return Action(action=action, conviction=conviction,
+                  probabilities=ans.get("action", {}).get("probabilities"),
+                  confidence=ans.get("action", {}).get("confidence"),
+                  usage=out.get("usage"))
 
 
 def blend(mechanical_target: float, act: Action,

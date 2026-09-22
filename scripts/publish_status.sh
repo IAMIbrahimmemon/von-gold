@@ -25,13 +25,17 @@ fi
 
 git add runtime/status.json
 [ -f runtime/control.json ] && git add runtime/control.json
+# The live decision feed (rewritten every decision by scripts/live_loop.py). Published so the
+# dashboard can show what the model is saying right now, not just the last session's record.
+[ -f runtime/feed.json ] && git add runtime/feed.json
 
 if git diff --cached --quiet; then
   echo "nothing to publish (runtime unchanged)"
   exit 0
 fi
 
-git -c user.name="von-gold bot" -c user.email="bot@localhost" commit -q -m "$MSG" -- runtime/status.json runtime/control.json
+git -c user.name="von-gold bot" -c user.email="bot@localhost" commit -q -m "$MSG" \
+  -- runtime/status.json runtime/control.json runtime/feed.json
 
 # Pull any control change made from the web monitor before pushing, so a user flipping
 # the switch while we were mid-tick is not overwritten by a non-fast-forward rejection.

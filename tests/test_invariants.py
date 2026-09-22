@@ -926,3 +926,31 @@ def test_live_loop_never_opens_a_position_without_allow_entry():
     # the gate must consult allow_entry before accepting an entry action
     assert '"open_long", "add_long") and args.allow_entry' in src
     assert "ignored (entry disabled)" in src
+
+
+def test_probe_asks_exactly_the_question_production_asks():
+    """The measurement must describe the deployed question, not a similar one.
+
+    This is a bug that actually happened: scripts/probe_five_way.py defined its own copy of the
+    five criteria with different wording from src/vongold/action.py. Both ran, both produced
+    270/270 collapses, but they were measuring DIFFERENT questions -- so the documented
+    result did not describe the bot's behaviour, and the argmax label differed between them
+    ("reduce" in the probe, "add_long" live) on the very same state.
+
+    The probe must import the canonical question rather than restate it.
+    """
+    from pathlib import Path as _P
+    from vongold.action import QUESTION
+    src = (_P(__file__).resolve().parents[1] / "scripts" / "probe_five_way.py").read_text()
+    assert "from vongold.action import QUESTION" in src, (
+        "the probe must import the canonical question, not redefine the criteria"
+    )
+    assert "def build_questions" in src
+    # and the question it builds must be the same object
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_pfw", _P(__file__).resolve().parents[1] / "scripts" / "probe_five_way.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.build_questions(True) == QUESTION
+    assert mod.build_questions(False) == QUESTION

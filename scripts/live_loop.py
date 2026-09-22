@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -50,6 +51,38 @@ from vongold.strategy import build_features, mechanical_exposure  # noqa: E402
 from vongold.von_state import build_von_problem  # noqa: E402
 
 RUNTIME = Path(__file__).resolve().parents[1] / "runtime"
+REPO = Path(__file__).resolve().parents[1]
+
+# The rolling decision feed the dashboard renders. Kept in memory and rewritten whole each
+# cycle so the published file is always a consistent snapshot (a half-appended JSONL would
+# render as a torn feed).
+FEED: list[dict] = []
+
+
+def write_feed(path: Path, feed: list[dict], symbol: str, store, mech_target: float,
+               mark) -> None:
+    """Write the live decision feed the dashboard reads.
+
+    Deliberately a separate file from status.json: status.json is the once-per-session record
+    of what the STRATEGY decided, while this is the per-10s record of what the MODEL is
+    saying right now. Mixing them would make the session record churn every few seconds.
+    """
+    pos = store.state
+    payload = {
+        "symbol": symbol,
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "interval_source": "live_loop",
+        "price": round(mark.price, 4),
+        "mark": mark.as_dict(),
+        "mechanical_target": round(mech_target, 4),
+        "equity": round(pos.equity, 2),
+        "cash": round(pos.cash, 2),
+        "shares": pos.shares,
+        "decisions": feed[::-1],  # newest first, like a trade tape
+    }
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, indent=1))
+    tmp.replace(path)  # atomic: the dashboard never reads a partially written file
 
 
 def utcnow() -> str:
@@ -74,17 +107,25 @@ def fingerprint(state: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="live re-decide loop (paper)")
-    ap.add_argument("--interval", type=float, default=60.0,
-                    help="seconds between evaluations (10 is possible but von takes ~5s)")
+    ap.add_argument("--interval", type=float, default=10.0,
+                    help="seconds between decisions (von takes ~4.75s, so ~50%% duty cycle)")
     ap.add_argument("--allow-entry", action="store_true",
                     help="let the loop OPEN positions (untested intraday -- off by default)")
     ap.add_argument("--cycles", type=int, default=0, help="0 = run forever")
+    ap.add_argument("--cache-unchanged", action="store_true",
+                    help="skip the model call when the state fingerprint is unchanged. von is "
+                         "deterministic, so the answer would be identical -- this saves ~50%% CPU "
+                         "and produces the same feed (rows are marked cached)")
+    ap.add_argument("--publish-every", type=int, default=0,
+                    help="publish the feed to GitHub every N decisions (0 = never)")
+    ap.add_argument("--feed-size", type=int, default=60, help="decisions kept in the feed file")
     ap.add_argument("--symbol", default="GLD")
     ap.add_argument("--runtime", type=Path, default=RUNTIME)
     ap.add_argument("--journal", type=Path, default=None)
     args = ap.parse_args()
 
     journal = args.journal or (args.runtime / "live_loop.jsonl")
+    feed_path = args.runtime / "feed.json"
     store = PositionStore(args.runtime / "position.json")
 
     df_base = build_dataset(args.symbol, rng="10y").tail(800)
@@ -120,7 +161,7 @@ def main() -> int:
         fp = fingerprint(prob["state"])
         changed = fp != last_fp
 
-        if not changed and last_action is not None:
+        if args.cache_unchanged and not changed and last_action is not None:
             # Provably the same problem -> the same answer. Do not spend 5s of CPU on it.
             skipped += 1
             row = {"ts": utcnow(), "price": mark.price, "fingerprint": fp,
@@ -170,6 +211,20 @@ def main() -> int:
 
         with journal.open("a") as fh:
             fh.write(json.dumps(row) + "\n")
+
+        FEED.append({"ts": row["ts"], "price": mark.price, "action": act.action,
+                     "confidence": act.confidence, "probabilities": act.probabilities,
+                     "conviction": act.conviction, "latency_ms": int((time.time()-t0)*1000),
+                     "state_changed": True, "cached": False, "applied": applied,
+                     "market_open": mark.market_open,
+                     "age_minutes": round(mark.age_minutes, 1)})
+        del FEED[:-args.feed_size]
+        write_feed(feed_path, FEED, args.symbol, store, mech_target, mark)
+
+        if args.publish_every and cycles % args.publish_every == 0:
+            subprocess.run(["bash", str(REPO / "scripts" / "publish_status.sh"),
+                            "runtime: live decisions"], cwd=str(REPO),
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         el = time.time() - t0
         print(f"[{utcnow()}] ${mark.price:.2f} fp={fp} -> "

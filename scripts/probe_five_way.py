@@ -39,52 +39,24 @@ from vongold.strategy import build_features, mechanical_exposure  # noqa: E402
 from vongold.config import StrategyParams  # noqa: E402
 from vongold.von_state import build_von_problem  # noqa: E402
 
-# Five mutually exclusive actions, defined so each is falsifiable against the evidence in
-# the state. Criteria are written as observable conditions, not vibes -- von matches text
-# against these, so a vague criterion produces a vague answer.
-ACTION_CRITERIA = {
-    "open_long": "No position is currently held, and the evidence points to rising prices: "
-                 "momentum is positive across the longer horizons and price is above its "
-                 "long-run average.",
-    "add_long":  "A long position is already held, and the evidence still points to rising "
-                 "prices, so exposure should be increased toward the target.",
-    "hold":      "The evidence is mixed, conflicting, or weak, so the existing position "
-                 "should be left unchanged rather than acted on.",
-    "reduce":    "The evidence has weakened or turned against the current position, so "
-                 "exposure should be reduced but not eliminated.",
-    "close":     "The evidence points clearly to falling prices, or risk is materially "
-                 "elevated, so the position should be exited entirely.",
-}
+# The question is imported from the package, NOT redefined here. A duplicated wording would
+# mean the 270-day measurement describes a question the live bot never asks -- which is
+# exactly the bug this replaced: the probe and the live loop had different criteria for the
+# same five labels and produced different argmax answers for the same state.
+from vongold.action import QUESTION  # noqa: E402
+
+# Kept as an alias so older callers of this script keep working.
+ACTION_CRITERIA = QUESTION["action"]["criteria"]
 
 
 def build_questions(has_position: bool) -> dict:
-    """The 5-way action question. `has_position` only sharpens the wording of `hold`."""
-    return {
-        "action": {
-            "type": "choice",
-            "instructions": (
-                "You are deciding what to do with a gold position right now. Based only on "
-                "the evidence provided, choose the single best action. Judge each option "
-                "against its criterion and pick the one whose criterion the evidence "
-                "matches most closely -- do not default to 'hold' unless the evidence is "
-                "genuinely mixed."
-            ),
-            "criteria": ACTION_CRITERIA,
-        },
-        "conviction": {
-            "type": "score",
-            "instructions": "How strong is the evidence for the action you chose?",
-            # score criteria must be a LIST (one anchor per scale point); a dict raises a
-            # pydantic ValidationError inside von. `choice` criteria are a dict.
-            "criteria": [
-                "No conviction: the evidence is absent or contradictory",
-                "Low conviction: a single weak indicator points one way",
-                "Moderate conviction: several indicators align",
-                "High conviction: most indicators align consistently",
-                "Very high conviction: the evidence is unambiguous and fully supports the action",
-            ],
-        },
-    }
+    """The five-way action question, identical to what the live loop asks.
+
+    `has_position` no longer changes the wording: the state text already says whether a
+    position is held, so varying the criteria by position would mean two different questions
+    and two different measurements.
+    """
+    return QUESTION
 
 
 def main() -> int:

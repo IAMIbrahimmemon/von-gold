@@ -4,41 +4,84 @@ The requested output was five actions: **long / short / open / close / hold**, r
 every 10 seconds. All three parts were built and measured. This records what the
 measurements said, because two of the three did not survive contact with the data.
 
-## 1. The five-way question: built, and von collapses to one label
+## 1. The five-way question: built, and the argmax collapses
 
 `src/vongold/action.py` asks von for a single `choice` among five labels. The probe
 (`scripts/probe_five_way.py` -> `scripts/von_batch.py`) ran it over **270 real trading days**
 of GLD history, each day given the same state description the live path builds.
 
+> The probe **imports** the question from `vongold.action` rather than restating it. An earlier
+> version defined its own copy of the criteria with different wording, so it measured a
+> *different question* from the one the bot asks — the documented result did not describe the
+> deployed behaviour, and the winner differed between the two ("reduce" in the probe,
+> "add_long" live) on the very same state. A test now pins them together.
+
+Using the canonical wording:
+
 ```
-action distribution over 270 days
-   reduce        270    100.0%
+argmax distribution over 270 days
+   add_long      270    100.0%
 ```
 
-One distinct label out of five. Not "mostly reduce" — *always* reduce.
+One distinct winner out of five. Not "mostly add_long" — *always* add_long.
 
-The comparison that makes this damning:
+| option | mean prob | sd | min | max |
+|---|---|---|---|---|
+| `open_long` | 0.0302 | 0.0006 | 0.0288 | 0.0321 |
+| **`add_long`** | **0.3746** | 0.0065 | 0.3540 | 0.3937 |
+| `hold` | 0.3104 | 0.0089 | 0.2796 | 0.3396 |
+| `reduce` | 0.1949 | 0.0059 | 0.1827 | 0.2174 |
+| `close` | 0.0899 | 0.0024 | 0.0848 | 0.0992 |
 
-| | |
-|---|---|
-| Days price was **above** its 200-day MA | 236 |
-| ...on which von said **reduce** | **236** |
-| Days the mechanical strategy wanted exposure >5% | 218 |
-| ...on which von said **reduce** | **218** |
+Top probability averages 0.375 with a standard deviation of 0.0065 — the model never gets
+confident, and never reorders. This is the same failure as the descriptive question set
+("range" on 2,252 of 2,252 days), now reproduced across three independent question sets.
 
-So on 236 days when gold was in an uptrend — the exact situation where "reduce" is the wrong
-answer — von said reduce. Its confidence was ~7% with a standard deviation of 0.011, i.e.
-noise around a constant.
+### The important nuance: the values DO carry information
 
-This is the same failure as the previous descriptive question set, which answered "range" on
-2,252 of 2,252 days. The pattern is now established across two independent question sets:
-**von does not discriminate when asked to classify a market state.** It is a 395M
-non-autoregressive decision model; it matches a state against criteria, and when the criteria
-are not separable it returns whichever label is most generic.
+The winner is static, but the distribution is **not**. The per-option probabilities track
+market state and can be used as a readout:
 
-Consequence: the action output is wired in but **`ACTION_PRIOR_WEIGHT` defaults to 0.0**, so
-a constant label cannot move exposure. A model that always says "reduce" would otherwise
-quietly halve the account's exposure forever while appearing to work.
+| option | correlation with momentum | with above-200MA |
+|---|---|---|
+| `open_long` | **+0.585** | **+0.467** |
+| `add_long` | −0.005 | −0.046 |
+| `hold` | −0.373 | −0.232 |
+| `reduce` | +0.399 | +0.312 |
+| `close` | +0.270 | +0.101 |
+
+`open_long` at r=+0.585 against momentum is the strongest state relationship measured anywhere
+in this project. von is genuinely reading the market through these probabilities — it simply
+never lets any option cross the argmax threshold, because one label carries a baseline prior
+the others cannot overcome.
+
+**What does not work:** none of the probabilities predict the next day's return (|r| ≤ 0.117,
+n=270). So this is a description of the present, not a forecast of the future — the same
+conclusion as the macro gates.
+
+Consequence: the action output is wired in, and **`ACTION_PRIOR_WEIGHT` defaults to 0.0**, so
+a static winner cannot move exposure. The dashboard shows the full distribution and says
+plainly that the ranking is static.
+
+## 2. Re-deciding every 10 seconds: built, and the interval buys nothing extra
+
+`scripts/live_loop.py` re-decides on a timer, default **10 seconds** as requested. Two
+measurements matter here:
+
+* **A von decision takes ~3-8s** (subprocess transport, the path live use takes). At a 10s
+  interval the model is busy most of each cycle on a laptop.
+* **von is deterministic.** The same state asked three times returns byte-identical answers
+  (`range / 0.523 / 0.0527 / 0.5351` every time) — it does not sample. Therefore re-asking an
+  *unchanged* state cannot produce a different answer, and the feed will repeat the same values
+  until the **price** moves. Only the price changes the state.
+
+So by default the loop always calls the model (so the feed shows a real latency and cadence),
+and `--cache-unchanged` makes it skip provably-identical calls, which halves CPU with no change
+in output. Rows are marked `cached` when skipped.
+
+The signal is also **daily by construction**. The strategy was validated on daily closes; an
+intraday re-decide is a different strategy with no backtest behind it. So the loop may only
+**reduce** exposure by default. Opening intraday is behind `--allow-entry` and is untested.
 
 ## 2. Re-deciding every 10 seconds: built, but the interval buys nothing
 

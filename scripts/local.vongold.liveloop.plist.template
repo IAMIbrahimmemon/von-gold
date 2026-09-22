@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.vongold.liveloop</string>
+
+    <!-- A long-running service, unlike the daily tick job: this is what makes the dashboard
+         show decisions as they happen. KeepAlive=true means launchd restarts it if it dies,
+         so the feed keeps moving without anyone watching. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>REPO_DIR_PLACEHOLDER/scripts/run_live_loop.sh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Modest priority: the model is CPU-bound and this runs every 10s forever. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>Nice</key>
+    <integer>5</integer>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>REPO_DIR_PLACEHOLDER/runtime/liveloop.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>REPO_DIR_PLACEHOLDER/runtime/liveloop.err.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>REPO_DIR_PLACEHOLDER</string>
+</dict>
+</plist>

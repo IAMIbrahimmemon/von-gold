@@ -50,6 +50,34 @@
     padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:13px}
   #chart{width:100%;height:180px;display:block}
   .foot{margin-top:22px;color:var(--muted);font-size:11px;line-height:1.7}
+
+  /* --- jev-style decision feed --- */
+  .feed{display:grid;grid-template-columns:minmax(280px,1fr) minmax(320px,1.35fr);gap:12px;margin-bottom:12px}
+  @media (max-width:900px){.feed{grid-template-columns:1fr}}
+  .call .actionline{font-family:var(--mono);font-size:34px;font-weight:700;letter-spacing:.06em;
+    margin:2px 0 4px;line-height:1.1}
+  .call .sub2{font-size:11px;color:var(--muted);margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap}
+  .call .sub3{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6}
+  .bars{display:flex;flex-direction:column;gap:5px;margin-top:4px}
+  .bar{display:grid;grid-template-columns:78px 1fr 46px;align-items:center;gap:8px;font-size:11px}
+  .bar .lab{font-family:var(--mono);color:var(--muted);text-transform:lowercase}
+  .bar .track{background:var(--panel2);border-radius:3px;height:13px;overflow:hidden}
+  .bar .fill{height:100%;border-radius:3px;transition:width .25s ease}
+  .bar .val{font-family:var(--mono);text-align:right;color:var(--muted)}
+  .bar.win .lab{color:var(--fg);font-weight:700}
+  .bar.win .val{color:var(--fg)}
+  .tapelist{max-height:430px;overflow-y:auto;margin:-4px 0 0}
+  .tape{display:grid;grid-template-columns:64px 74px 1fr 66px;gap:8px;padding:5px 0;
+    border-bottom:1px solid var(--line);font-size:12px;align-items:center}
+  .tape:last-child{border-bottom:none}
+  .tape .t{font-family:var(--mono);color:var(--muted);font-size:11px}
+  .tape .a{font-family:var(--mono);font-weight:700;font-size:11px;text-transform:lowercase}
+  .tape .why{color:var(--muted);font-size:11px}
+  .tape .lat{font-family:var(--mono);color:var(--muted);font-size:10px;text-align:right}
+  .tabs{display:flex;gap:6px;margin-bottom:10px}
+  .tabbtn{background:var(--panel2);color:var(--muted);border:1px solid var(--line);
+    padding:5px 12px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer}
+  .tabbtn.active{color:var(--fg);border-color:var(--accent)}
   code{font-family:var(--mono);background:var(--panel2);padding:1px 5px;border-radius:4px}
 </style>
 </head>
@@ -94,20 +122,45 @@
     <div id="plNote" class="muted" style="font-size:11px;margin-top:10px"></div>
   </div>
 
-  <div class="grid g2" style="margin-bottom:12px">
-    <div class="panel">
-      <h2>von decision (latest session)</h2>
-      <div id="vonBox"></div>
+  <div class="feed">
+    <!-- CALL: the current decision, with a confidence bar per option -->
+    <div class="panel call">
+      <h2>Call</h2>
+      <div id="callAction" class="actionline">—</div>
+      <div class="sub2" id="callMeta"></div>
+      <div id="callBars" class="bars"></div>
+      <div class="sub3" id="callConv"></div>
+      <div class="sub3" id="callNote"></div>
+      <div class="sub3" style="color:var(--muted);border-top:1px solid var(--line);padding-top:8px;margin-top:8px">
+        <b>Read this honestly.</b> The bars are von's real probability distribution over the five
+        actions, and they do move with market state. But the <i>ranking</i> is nearly static:
+        measured over 270 days the top option never changed, because one action carries a
+        baseline prior that the others cannot cross. So treat the bars as a state readout, not
+        as a decision the model is weighing. It is also not wired to move money — the action
+        weight is 0 until something shows it can pick the right label.
+      </div>
     </div>
-    <div class="panel">
-      <h2>Strategy inputs</h2>
-      <div id="inputsBox"></div>
+
+    <!-- CALLS: the rolling tape of decisions, newest first -->
+    <div class="panel calls">
+      <h2>Calls <span class="muted" style="font-weight:400" id="callsCount"></span></h2>
+      <div id="callsList" class="tapelist"></div>
     </div>
   </div>
 
   <div class="panel" style="margin-bottom:12px">
-    <h2>Fill history</h2>
-    <div id="fillsBox"></div>
+    <h2>von decision (latest session)</h2>
+    <div id="vonBox"></div>
+  </div>
+
+  <div class="panel" style="margin-bottom:12px">
+    <h2>Trades &middot; strategy inputs</h2>
+    <div id="tabs" class="tabs">
+      <button class="tabbtn active" data-tab="trades">Trades</button>
+      <button class="tabbtn" data-tab="inputs">Inputs</button>
+    </div>
+    <div id="tabTrades"><div id="fillsBox"></div></div>
+    <div id="tabInputs" style="display:none"><div id="inputsBox"></div></div>
   </div>
 
   <div class="foot">
@@ -300,6 +353,93 @@ function setControl(){
 }
 
 // ---------------------------------------------------------------------------
+// The decision feed (jeV-style): what the model is saying, right now.
+//
+// Reads runtime/feed.json, which the live loop rewrites every decision (default 10s). The
+// CALL panel shows the current action with the full probability distribution behind it --
+// von softmaxes over all options and returns every one, so the bars are the model's actual
+// confidences, not a rendering of the winner alone.
+//
+// Honest framing, because it matters: the RANKING of these bars is nearly static (see
+// docs/ACTIONS.md -- "reduce" wins on a baseline prior), while the VALUES do move with market
+// state. So the bars are informative and the argmax is not. The panel says so rather than
+// implying a decision the model is not really making.
+// ---------------------------------------------------------------------------
+const ACTION_COLORS = {
+  open_long: "#3fb950", add_long: "#58a6ff", hold: "#8b949e",
+  reduce: "#d29922", close: "#f85149"
+};
+const ACTION_ORDER = ["open_long", "add_long", "hold", "reduce", "close"];
+
+function barRows(probs, winner){
+  const keys = ACTION_ORDER.filter(k=>k in probs);
+  const mx = Math.max(...keys.map(k=>probs[k]), 1e-9);
+  return keys.map(k=>{
+    const p = probs[k];
+    const w = Math.max(1.5, (p/mx)*100);          // scaled to the largest, so shape is visible
+    const col = ACTION_COLORS[k] || "#8b949e";
+    return `<div class="bar ${k===winner?"win":""}">
+      <span class="lab">${esc(k)}</span>
+      <span class="track"><span class="fill" style="width:${w.toFixed(1)}%;background:${col}"></span></span>
+      <span class="val">${(p*100).toFixed(2)}%</span>
+    </div>`;
+  }).join("");
+}
+
+function renderCall(d, fresh){
+  if(!d){ 
+    document.getElementById("callAction").textContent = "—";
+    document.getElementById("callBars").innerHTML = "";
+    document.getElementById("callMeta").textContent = "no live decisions yet";
+    return;
+  }
+  const a = d.action || "—";
+  const el = document.getElementById("callAction");
+  el.textContent = String(a).toUpperCase();
+  el.style.color = ACTION_COLORS[d.action] || "var(--fg)";
+  document.getElementById("callMeta").innerHTML =
+    `<span>${esc(String(d.ts).slice(11,19))} UTC</span>` +
+    `<span>${esc(String(d.price))} GLD</span>` +
+    `<span>${d.latency_ms} ms</span>` +
+    (fresh? `<span style="color:#3fb950">● live</span>` : `<span>${Math.round(d.age_minutes||0)}m old</span>`);
+  document.getElementById("callBars").innerHTML = d.probabilities
+    ? barRows(d.probabilities, d.action) : "";
+  document.getElementById("callConv").innerHTML = d.confidence!=null
+    ? `decision confidence <b>${(d.confidence*100).toFixed(1)}%</b> ` +
+      `<span class="muted">(gap between the top two options)</span>`
+    : "";
+  document.getElementById("callNote").innerHTML = d.applied
+    ? `applied: <b>${esc(d.applied)}</b>` : "";
+}
+
+function renderTape(list){
+  document.getElementById("callsCount").textContent = list.length ? `${list.length}` : "";
+  document.getElementById("callsList").innerHTML = list.length ? list.map(d=>`
+    <div class="tape">
+      <span class="t">${esc(String(d.ts).slice(11,19))}</span>
+      <span class="a" style="color:${ACTION_COLORS[d.action]||"var(--fg)"}">${esc(String(d.action||"—"))}</span>
+      <span class="why">${esc(d.applied||"")}</span>
+      <span class="lat">${d.latency_ms!=null? d.latency_ms+"ms":""}</span>
+    </div>`).join("") : `<div class="muted" style="font-size:12px">No decisions yet.</div>`;
+}
+
+let FEED = null;
+
+async function loadFeed(){
+  try{
+    const r = await fetch(`${RAW}/feed.json?t=${Date.now()}`, {cache:"no-store"});
+    if(!r.ok){ renderCall(null); return; }
+    const d = await r.json();
+    FEED = d;
+    const freshest = (d.decisions && d.decisions[0]) || null;
+    const gen = d.generated_at ? Date.parse(d.generated_at) : 0;
+    const fresh = gen && (Date.now()-gen < 40000);
+    renderCall(freshest, fresh);
+    renderTape(d.decisions || []);
+  }catch(e){}
+}
+
+// ---------------------------------------------------------------------------
 // Live valuation.
 //
 // The strategy decides once a day, so status.json only changes on a tick. A page that
@@ -376,6 +516,22 @@ setInterval(load, 60000);
 // hammering the upstream (the endpoint caches for 20s server-side).
 setInterval(loadQuote, 20000);
 loadQuote();
+
+// The feed is the live thing: poll every 5s so a 10s decision interval always shows up
+// promptly, and keep it independent of the (much slower) session status poll.
+setInterval(loadFeed, 5000);
+loadFeed();
+
+// Trades / Inputs tabs
+document.querySelectorAll(".tabbtn").forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll(".tabbtn").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    const t = b.dataset.tab;
+    document.getElementById("tabTrades").style.display = t==="trades" ? "" : "none";
+    document.getElementById("tabInputs").style.display = t==="inputs" ? "" : "none";
+  };
+});
 </script>
 </body>
 </html>
