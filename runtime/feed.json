@@ -1,6 +1,6 @@
 {
  "symbol": "GLD",
- "generated_at": "2026-09-22T06:34:58+00:00",
+ "generated_at": "2026-09-22T06:35:10+00:00",
  "interval_source": "live_loop",
  "price": 398.35,
  "mark": {
@@ -9,13 +9,33 @@
   "source": "yfinance 1m bar",
   "is_intraday": false,
   "market_open": false,
-  "age_minutes": 635.7
+  "age_minutes": 636.0
  },
  "mechanical_target": 0.0,
  "equity": 10000.0,
  "cash": 10000.0,
  "shares": 0.0,
  "decisions": [
+  {
+   "ts": "2026-09-22T06:35:10+00:00",
+   "price": 398.3500061035156,
+   "action": "add_long",
+   "confidence": 0.068,
+   "probabilities": {
+    "open_long": 0.0296,
+    "add_long": 0.3785,
+    "hold": 0.3108,
+    "reduce": 0.1899,
+    "close": 0.0912
+   },
+   "conviction": 2.15,
+   "latency_ms": 12773,
+   "state_changed": true,
+   "cached": false,
+   "applied": "ignored (entry disabled)",
+   "market_open": false,
+   "age_minutes": 636.0
+  },
   {
    "ts": "2026-09-22T06:34:58+00:00",
    "price": 398.3500061035156,
