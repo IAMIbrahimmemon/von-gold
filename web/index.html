@@ -89,6 +89,12 @@
     <div id="chartNote" class="muted" style="font-size:11px;margin-top:6px"></div>
   </div>
 
+  <div class="panel" style="margin-bottom:12px">
+    <h2>Profit / Loss <span class="muted" style="font-weight:400;font-size:11px">— paper account, vs your $10,000 stake</span></h2>
+    <div class="grid g4" id="plGrid"></div>
+    <div id="plNote" class="muted" style="font-size:11px;margin-top:10px"></div>
+  </div>
+
   <div class="grid g2" style="margin-bottom:12px">
     <div class="panel">
       <h2>von decision (latest session)</h2>
@@ -213,6 +219,34 @@ async function load(){
     document.getElementById("mTarget").textContent = fmtPct(status.target_exposure,0);
     document.getElementById("mTargetD").textContent =
       `mechanical ${fmtPct(status.mechanical_target,0)} × von ${Number(status.von_multiplier??1).toFixed(2)}`;
+    // ---- Profit / Loss windows ----
+    const pl = status.pl;
+    const plGrid = document.getElementById("plGrid");
+    if(pl && pl.windows){
+      const LABELS = {all_time:"All time", past_24h:"Past 24 hours",
+                      past_6h:"Past 6 hours", past_hour:"Past hour"};
+      plGrid.innerHTML = pl.windows.map(w=>{
+        const lab = LABELS[w.label] || w.label;
+        const cls = w.pl_abs > 0 ? "good" : (w.pl_abs < 0 ? "bad" : "muted");
+        const sign = w.pl_abs > 0 ? "+" : "";
+        const isFlat = w.basis === "flat_no_exposure";
+        const sub = isFlat ? "flat — no position"
+                   : (w.basis === "reconstructed_intraday" ? "intraday marks"
+                   : (w.basis === "includes_a_trade" ? "includes a trade" : ""));
+        return `<div class="panel metric">
+          <div class="k">${esc(lab)}</div>
+          <div class="v ${cls}">${sign}${fmtMoney(w.pl_abs)}</div>
+          <div class="d">${sign}${(w.pl_pct*100).toFixed(2)}%${sub? " &middot; "+sub : ""}</div>
+        </div>`;
+      }).join("");
+      document.getElementById("plNote").innerHTML =
+        `Starting stake ${fmtMoney(pl.initial_capital)} &middot; current ${fmtMoney(pl.current_equity)} &middot; ` +
+        `${pl.fills} paper fill(s). Windows shorter than a day are meaningful only while a position is held — ` +
+        `the bot is flat much of the time by design, and a flat window is exactly $0, not a missing value.`;
+    } else if(plGrid){
+      plGrid.innerHTML = `<div class="muted" style="font-size:12px">No P/L yet — waiting on the first published session.</div>`;
+    }
+
     document.getElementById("mPrice").textContent = fmtMoney(status.price);
     document.getElementById("mPriceD").textContent = `as of ${esc(status.date)}`;
     const dd = status.drawdown_from_peak;

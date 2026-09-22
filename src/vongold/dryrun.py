@@ -30,6 +30,7 @@ import pandas as pd
 from .backtest import run_backtest
 from .config import CostModel, StrategyParams
 from .data import build_dataset
+from .pl import compute_pl
 from .state_store import Control, Ledger, PositionStore, read_status, utcnow, write_status
 from .strategy import build_features, mechanical_exposure
 from .von_client import decide, von_environment_status
@@ -267,6 +268,15 @@ def run_once(
             {"ts": r["ts"], "equity": r.get("equity_after"), "date": r.get("date")}
             for r in ledger.all() if r.get("kind") == "fill"
         ][-250:],
+        # Reconstructed from the append-only ledger rather than sampled from the curve
+        # above, so the sub-day windows are real instead of reading as flat simply
+        # because no tick landed inside them.
+        "pl": compute_pl(
+            ledger_path=ledger.path,
+            initial_capital=store.initial_capital,
+            current_equity=pos.equity,
+            shares=pos.shares,
+        ),
     }
     write_status(status, runtime / "status.json")
     return status

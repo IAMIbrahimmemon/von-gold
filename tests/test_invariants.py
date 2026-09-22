@@ -710,3 +710,138 @@ def test_fred_does_not_reuse_the_browser_session():
         assert "Mozilla" not in ua and "Chrome" not in ua, (
             f"fetch_fred sent a browser User-Agent ({ua!r}); FRED rejects those"
         )
+
+
+# ------------------------------------------------------------------ P/L windows
+
+def _ledger(tmp_path, events):
+    import json
+    p = tmp_path / "ledger.jsonl"
+    p.write_text("\n".join(json.dumps(e) for e in events) + "\n")
+    return p
+
+
+def test_pl_all_time_is_against_the_initial_stake(tmp_path):
+    """All-time P/L must be measured from the $10k the user actually started with."""
+    from datetime import datetime, timedelta, timezone
+
+    from vongold.pl import compute_pl
+
+    now = datetime.now(timezone.utc)
+    p = _ledger(tmp_path, [
+        {"ts": (now - timedelta(days=5)).isoformat(), "kind": "fill", "price": 400.0,
+         "shares": 0.0, "cash": 10000.0},
+        {"ts": (now - timedelta(days=1)).isoformat(), "kind": "fill", "price": 410.0,
+         "shares": 0.0, "cash": 10250.0},
+    ])
+    out = compute_pl(ledger_path=p, current_equity=10250.0, shares=0.0, now=now,
+                     intraday_bars=None)
+    assert out["initial_capital"] == 10000.0
+    all_time = out["windows"][0]
+    assert all_time["label"] == "all_time"
+    assert all_time["pl_abs"] == 250.0
+    assert abs(all_time["pl_pct"] - 0.025) < 1e-9
+
+
+def test_pl_flat_at_both_ends_is_not_reported_as_no_loss(tmp_path):
+    """Regression: flat at both ends does NOT mean no P/L was possible.
+
+    A position opened and closed inside the window leaves the account flat at both ends
+    while realising a gain. The first implementation of this module reported the correct
+    dollar figure but labelled it "no gain or loss was possible", which is a
+    contradiction a user would have spotted and distrusted. It must be flagged as
+    containing a trade instead.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from vongold.pl import compute_pl
+
+    now = datetime.now(timezone.utc)
+    p = _ledger(tmp_path, [
+        {"ts": (now - timedelta(hours=10)).isoformat(), "kind": "fill", "price": 400.0,
+         "shares": 0.0, "cash": 10000.0},
+        {"ts": (now - timedelta(hours=5)).isoformat(), "kind": "fill", "price": 400.0,
+         "shares": 5.0, "cash": 8000.0},
+        {"ts": (now - timedelta(hours=2)).isoformat(), "kind": "fill", "price": 410.0,
+         "shares": 0.0, "cash": 10050.0},
+    ])
+    out = compute_pl(ledger_path=p, current_equity=10050.0, shares=0.0, now=now,
+                     intraday_bars=None)
+    w6 = next(w for w in out["windows"] if w["label"] == "past_6h")
+    assert w6["pl_abs"] == 50.0, "the realised gain must be reported"
+    assert w6["basis"] != "flat_no_exposure", (
+        "a window containing a trade must never be labelled as having no exposure"
+    )
+    assert w6["basis"] == "includes_a_trade"
+
+
+def test_pl_genuinely_flat_window_is_exactly_zero(tmp_path):
+    """When no position was open at any point, $0 is the exact answer, and it is labelled."""
+    from datetime import datetime, timedelta, timezone
+
+    from vongold.pl import compute_pl
+
+    now = datetime.now(timezone.utc)
+    p = _ledger(tmp_path, [
+        {"ts": (now - timedelta(days=2)).isoformat(), "kind": "fill", "price": 400.0,
+         "shares": 0.0, "cash": 10000.0},
+    ])
+    out = compute_pl(ledger_path=p, current_equity=10000.0, shares=0.0, now=now,
+                     intraday_bars=None)
+    for w in out["windows"]:
+        assert w["pl_abs"] == 0.0
+    for label in ("past_24h", "past_6h", "past_hour"):
+        w = next(x for x in out["windows"] if x["label"] == label)
+        assert w["basis"] == "flat_no_exposure"
+
+
+def test_pl_curve_is_reconstructed_not_sampled(tmp_path):
+    """The curve must come from ledger fills, not from a sampled status blob.
+
+    A sampled curve would report a sub-day window as flat purely because no tick landed
+    inside it. Reconstructing from the append-only ledger keeps it exact.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from vongold.pl import reconstruct_equity_curve, load_events
+
+    now = datetime.now(timezone.utc)
+    p = _ledger(tmp_path, [
+        {"ts": (now - timedelta(days=3)).isoformat(), "kind": "decision"},
+        {"ts": (now - timedelta(days=2)).isoformat(), "kind": "fill", "price": 400.0,
+         "shares": 2.0, "cash": 9200.0},
+        {"ts": (now - timedelta(days=1)).isoformat(), "kind": "fill", "price": 405.0,
+         "shares": 0.0, "cash": 10010.0},
+    ])
+    curve = reconstruct_equity_curve(load_events(p))
+    assert len(curve) == 2, "only fills define an equity mark"
+    assert curve[0][1] == 9200.0 + 2.0 * 400.0
+    assert curve[1][1] == 10010.0
+
+
+def test_pl_survives_a_corrupt_ledger_line(tmp_path):
+    """An interrupted write leaves a partial final line; that must not break reporting."""
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    from vongold.pl import compute_pl
+
+    now = datetime.now(timezone.utc)
+    p = tmp_path / "ledger.jsonl"
+    good = {"ts": (now - timedelta(days=1)).isoformat(), "kind": "fill",
+            "price": 400.0, "shares": 0.0, "cash": 10100.0}
+    p.write_text(json.dumps(good) + "\n" + '{"ts": "2026-09-21T00:00:00+00:00", "kin')
+    out = compute_pl(ledger_path=p, current_equity=10100.0, shares=0.0, now=now,
+                     intraday_bars=None)
+    assert out["fills"] == 1
+    assert out["total_pl_abs"] == 100.0
+
+
+def test_pl_windows_cover_the_requested_labels(tmp_path):
+    """The user asked for exactly these four windows."""
+    from vongold.pl import compute_pl
+
+    p = _ledger(tmp_path, [])
+    out = compute_pl(ledger_path=p, current_equity=10000.0, shares=0.0, intraday_bars=None)
+    labels = [w["label"] for w in out["windows"]]
+    assert labels == ["all_time", "past_24h", "past_6h", "past_hour"]

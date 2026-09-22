@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-22T04:25:54+00:00",
+  "generated_at": "2026-09-22T04:41:53+00:00",
   "symbol": "GLD",
   "enabled": true,
   "kill_switch_tripped": false,
@@ -113,5 +113,57 @@
       "equity": 9935.504255001699,
       "date": "2026-08-28"
     }
-  ]
+  ],
+  "pl": {
+    "windows": [
+      {
+        "label": "all_time",
+        "pl_abs": -64.5,
+        "pl_pct": -0.00645,
+        "start_equity": 10000.0,
+        "end_equity": 9935.5,
+        "basis": "reconstructed",
+        "note": "against the $10,000 starting stake"
+      },
+      {
+        "label": "past_24h",
+        "pl_abs": -64.5,
+        "pl_pct": -0.00645,
+        "start_equity": 10000.0,
+        "end_equity": 9935.5,
+        "basis": "includes_a_trade",
+        "note": "a trade occurred in this window"
+      },
+      {
+        "label": "past_6h",
+        "pl_abs": -64.5,
+        "pl_pct": -0.00645,
+        "start_equity": 10000.0,
+        "end_equity": 9935.5,
+        "basis": "includes_a_trade",
+        "note": "a trade occurred in this window"
+      },
+      {
+        "label": "past_hour",
+        "pl_abs": -64.5,
+        "pl_pct": -0.00645,
+        "start_equity": 10000.0,
+        "end_equity": 9935.5,
+        "basis": "includes_a_trade",
+        "note": "a trade occurred in this window"
+      }
+    ],
+    "initial_capital": 10000.0,
+    "current_equity": 9935.5,
+    "total_pl_abs": -64.5,
+    "total_pl_pct": -0.00645,
+    "shares": 0.0,
+    "ledger_events": 11,
+    "fills": 4,
+    "mark_source": "no position",
+    "intraday_marks": false,
+    "first_fill_ts": "2026-09-22T04:02:59+00:00",
+    "last_fill_ts": "2026-09-22T04:02:59+00:00",
+    "generated_at": "2026-09-22T04:41:53.588264+00:00"
+  }
 }

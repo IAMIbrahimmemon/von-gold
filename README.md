@@ -69,6 +69,36 @@ env -u PYTHONPATH .venv/bin/python scripts/long_history.py
 at its own venv and silently shadows this one's packages — you get `ModuleNotFoundError`
 for something you can see is installed.
 
+## Watching it: profit / loss windows
+
+The dashboard shows P/L against your original $10,000 for **all time, past 24 hours, past
+6 hours, and past hour**.
+
+These are **reconstructed from the append-only ledger**, not sampled from a saved equity
+curve. That distinction matters: the curve is only recorded when the bot ticks, so a
+sampled version would report "past hour" as flat purely because no tick landed in that
+hour. Rebuilding from the ledger's fill events keeps every window exact.
+
+Each window is labelled with what it's actually telling you:
+
+| Label | Meaning |
+|---|---|
+| `against the $10,000 starting stake` | all-time P/L, the number you care about |
+| `includes a trade` | a fill landed in this window, so the move is real but not purely mark-to-market |
+| `intraday marks` | window priced with GLD 5-minute bars (position held at both ends) |
+| `flat — no position` | no position was open at any point in the window, so $0 is exact |
+
+**Read the sub-day windows with this in mind:** the bot is deliberately flat roughly half
+the time, and GLD only trades 09:30–16:00 ET. A "past hour" of $0 usually means *no
+exposure*, not *no data* — the label says which. Sub-day P/L is only informative while a
+position is open.
+
+One trap that had to be avoided explicitly: a window that is **flat at both ends is not
+the same as a window with no P/L**. A position opened and closed inside six hours leaves
+the account flat at both ends while realising a gain in the middle. The first version of
+this code reported the right dollar figure while labelling it "no loss possible" — a
+contradiction the tests now pin against.
+
 ## Architecture
 
 Three environments, deliberately kept apart:
@@ -97,6 +127,7 @@ subprocess has no lifecycle and cannot be left accidentally down.
 | `src/vongold/news.py` | Free RSS feeds, deterministic lexical classification, impact test |
 | `src/vongold/dryrun.py` | The paper-trading loop, kill switch, fill simulation |
 | `src/vongold/state_store.py` | The on/off switch, the ledger, the status blob |
+| `src/vongold/pl.py` | Reconstructs P/L for every window from the ledger |
 | `web/` | Vercel dashboard + control endpoint |
 
 ### Safety properties (all tested)
@@ -207,9 +238,9 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.vongold.dryrun.pli
 
 **Verified (actually executed):**
 
-* **37/37** invariant tests pass, including the two no-lookahead checks, the kill-switch
-  ordering regression, the stale-cache guard, the price-source fallback chain, and the
-  "defaults encode measured findings" test
+* **43/43** invariant tests pass, including the two no-lookahead checks, the kill-switch
+  ordering regression, the stale-cache guard, the price-source fallback chain, the six
+  P/L window tests, and the "defaults encode measured findings" test
 * Every documented number regenerates from `scripts/*.py` on the shipped defaults — no
   parameter overrides hiding in the scripts that produced the tables
 * Full data rebuild timed end-to-end: **16.8s** (was 210s before the FRED UA fix)
