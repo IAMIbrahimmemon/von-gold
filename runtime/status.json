@@ -1,25 +1,26 @@
 {
-  "generated_at": "2026-09-22T06:21:13+00:00",
+  "generated_at": "2026-09-22T20:15:12+00:00",
   "symbol": "GLD",
   "enabled": true,
   "kill_switch_tripped": false,
   "date": "2026-09-21",
-  "price": 398.3500061035156,
+  "price": 400.0799865722656,
   "signal_close": 398.3800048828125,
+  "flat_reason": "price 400.08 is below its 200d trend gate -- flat is the strategy's decision, not an error",
   "mark": {
-    "price": 398.35,
-    "as_of": "2026-09-21T15:59:00-04:00",
+    "price": 400.08,
+    "as_of": "2026-09-22T15:59:00-04:00",
     "source": "yfinance 1m bar",
     "is_intraday": false,
     "market_open": false,
-    "age_minutes": 622.2
+    "age_minutes": 16.2
   },
   "spot": {
-    "spot_xau_usd": 4318.0,
-    "updated_at": "2026-09-22T06:21:05Z",
+    "spot_xau_usd": 4360.399902,
+    "updated_at": "2026-09-22T20:15:07Z",
     "source": "gold-api.com"
   },
-  "as_of": "2026-09-22T06:21:13+00:00",
+  "as_of": "2026-09-22T20:15:12+00:00",
   "target_exposure": 0.0,
   "mechanical_target": 0.0,
   "von_multiplier": 1.0,
@@ -27,6 +28,11 @@
   "cash": 10000.0,
   "equity": 10000.0,
   "drawdown_from_peak": 0.0,
+  "realized_pl": 0.0,
+  "fees_paid": 0.0,
+  "trades": 0,
+  "wins": 0,
+  "losses": 0,
   "traded": false,
   "von": {
     "regime": "range",
@@ -95,12 +101,12 @@
     "total_pl_abs": 0.0,
     "total_pl_pct": 0.0,
     "shares": 0.0,
-    "ledger_events": 3,
+    "ledger_events": 4,
     "fills": 0,
     "mark_source": "no position",
     "intraday_marks": false,
     "first_fill_ts": null,
     "last_fill_ts": null,
-    "generated_at": "2026-09-22T06:21:13.699670+00:00"
+    "generated_at": "2026-09-22T20:15:12.487856+00:00"
   }
 }
