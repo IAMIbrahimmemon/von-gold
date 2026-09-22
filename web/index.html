@@ -446,6 +446,17 @@ function renderCall(d, fresh){
     ? `applied: <b>${esc(d.applied)}</b>` : "";
 }
 
+function mergeTape(published){
+  // Two sources, one tape. ntfy gives fresh rows but retains only ~25 messages on the free
+  // tier; the published feed carries up to 80 but lags by minutes. Merge and dedupe by
+  // timestamp so the tape is both full and current, whichever is ahead.
+  const byTs = new Map();
+  for(const r of (published||[])) if(r && r.ts) byTs.set(r.ts, r);
+  for(const r of (LIVE_ROWS||[])) if(r && r.ts) byTs.set(r.ts, r);  // live wins on collision
+  const out = [...byTs.values()].sort((a,b)=> Date.parse(b.ts) - Date.parse(a.ts));
+  return out.slice(0, 80);
+}
+
 function renderTape(list){
   document.getElementById("callsCount").textContent = list.length ? `${list.length}` : "";
   document.getElementById("callsList").innerHTML = list.length ? list.map(d=>`
@@ -501,7 +512,7 @@ async function startRealtime(){
       LIVE_ROWS = LIVE_ROWS.slice(0, 80);
       if(LIVE_ROWS.length){
         renderCall(LIVE_ROWS[0], true);
-        renderTape(LIVE_ROWS);
+        renderTape(mergeTape(FEED ? (FEED.decisions || []) : []));
         const why = document.getElementById("whyBox");
         if(why && FEED) renderWhy(FEED);
       }
@@ -528,7 +539,7 @@ async function startRealtime(){
       LIVE_ROWS = LIVE_ROWS.slice(0, 80);
       setRtStatus(`live · ${LIVE_ROWS.length}`);
       renderCall(LIVE_ROWS[0], true);
-      renderTape(LIVE_ROWS);
+      renderTape(mergeTape(FEED ? (FEED.decisions || []) : []));
     };
   }catch(e){ setRtStatus("unavailable"); }
 }
@@ -569,7 +580,9 @@ async function loadFeed(){
       ? (Date.parse(sse.ts) >= Date.parse(freshest.ts) ? sse : freshest)
       : (sse || freshest);
     renderCall(pick, !!(sse && pick === sse));
-    renderTape(LIVE_ROWS.length ? LIVE_ROWS : (d.decisions || []));
+    const merged = mergeTape(d.decisions || []);
+    renderTape(merged);
+    setRtStatus(LIVE_ROWS.length ? `live · ${LIVE_ROWS.length}` : "live (idle)");
   }catch(e){}
 }
 
